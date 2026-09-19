@@ -457,6 +457,16 @@ measured 1.5x faster on a real book (1.1k → 1.7k chars/s). Point ids derive fr
 chunk position, so processing order does not affect what is stored; a real-model
 test asserts each vector still returns aligned with its text.
 
+Batch size matters for more than speed. At 32 the engine held ~16GB resident
+during the book ingest and left a 24GB host with under 1GB free — the padded
+batch is the peak allocation, and it is cached per input shape. At 8 it stays
+near 1.5GB with no measurable throughput loss, so 8 is the default.
+
+A book's back-of-book index is an alphabetical keyword list that matches almost
+any query; it ranked second for "generator expression versus list comprehension"
+before EPUB front and back matter (cover, title page, copyright, contents,
+index, colophon) was skipped. Prefaces, appendices and afterwords are kept.
+
 ### 11.6 Jobs and restarts
 
 Ingest reuses the sync job table and `get_sync_status`. Jobs are in-process

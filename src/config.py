@@ -75,7 +75,10 @@ class Settings(BaseSettings):
     # --- Execution -----------------------------------------------------------
     # ONNX inference is blocking and would stall the event loop, including the
     # MCP session keepalive, if run inline.
-    embed_batch_size: int = 32
+    # Batches are padded to their longest text, so peak memory scales with batch
+    # size times sequence length: 32 held ~16GB resident during a long ingest and
+    # starved a 24GB host. 8 stays near 1.5GB for no measurable throughput loss.
+    embed_batch_size: int = 8
     inference_workers: int = 2
     eager_model_load: bool = True
 

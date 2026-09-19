@@ -69,6 +69,15 @@ def html_archive(data: bytes, title: str) -> LoadedDoc:
 
 # --- EPUB ----------------------------------------------------------------------
 
+# Front and back matter: no prose worth retrieving, and a book's index is an
+# alphabetical keyword list that matches almost any query. Prefaces, appendices
+# and afterwords are kept — they are real content.
+_EPUB_SKIP_RE = re.compile(
+    r"(^|/)(cover|titlepage|title-page|copyright[-\w]*|toc|nav|ix|index|colophon|"
+    r"dedication|praise)[-\w]*\d*\.x?html?$",
+    re.IGNORECASE,
+)
+
 _NS = {
     "c": "urn:oasis:names:tc:opendocument:xmlns:container",
     "opf": "http://www.idpf.org/2007/opf",
@@ -98,6 +107,8 @@ def epub(data: bytes, fallback_title: str) -> LoadedDoc:
         for itemref in opf.findall(".//opf:spine/opf:itemref", _NS):
             href = manifest.get(itemref.attrib.get("idref", ""))
             if not href:
+                continue
+            if _EPUB_SKIP_RE.search(href):
                 continue
             path = posixpath.normpath(posixpath.join(opf_dir, href.split("#", 1)[0]))
             try:

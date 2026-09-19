@@ -184,6 +184,19 @@ class TestEpub:
             ["Chapter 5. Recursion", "Infinite Recursion"],
         ]
 
+    def test_front_and_back_matter_are_skipped(self):
+        data = _epub(
+            [
+                ("ch01.html", "<h1>Real Chapter</h1><p>Content.</p>"),
+                ("ix01.html", "<h1>Index</h1><p>asyncio, 12, 40, 91</p>"),
+                ("toc01.html", "<h1>Table of Contents</h1><p>Chapter 1</p>"),
+                ("copyright-page01.html", "<h1>Copyright</h1><p>All rights reserved.</p>"),
+                ("app01.html", "<h1>Appendix A</h1><p>Kept.</p>"),
+            ]
+        )
+        doc = loaders.epub(data, "fallback")
+        assert [s.heading_path for s in doc.sections] == [["Appendix A"], ["Real Chapter"]]
+
     def test_code_listings_keep_their_formatting(self):
         data = _epub(
             [

@@ -16,7 +16,8 @@ in `docs/design/context-mcp-engine.md`.
 - [x] `ingest_document`, `get_best_practices`, `list_doc_sources`.
 - [x] Loaders: Sphinx HTML archives, EPUB, PDF (bookmarks), Markdown from GitHub.
 - [x] Presets: Python 3.14, FastAPI, Pydantic, SQLAlchemy 2.0, pytest.
-- [ ] **First full ingest** of the 19 books and 5 presets — queued 2026-09-19.
+- [ ] **First full ingest** of the 19 books and 5 presets — re-queued
+      2026-09-19 after the EPUB front/back-matter fix.
       Check `list_doc_sources` and the job statuses for failures.
 - [ ] **A labelled query set for docs retrieval**, before tuning anything:
       chunk size, whether `rerank` helps here, whether books crowd out the

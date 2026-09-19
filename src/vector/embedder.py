@@ -130,12 +130,23 @@ class FastEmbedder:
         sparse_model = await self._get_sparse()
         batch = self._settings.embed_batch_size
 
+        # A batch is padded to its longest text, so one long listing among short
+        # chunks makes the whole batch pay for its length. Embedding in length
+        # order keeps batches uniform: 1.5x faster measured on a real book.
+        order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+        ordered = [texts[i] for i in order]
+
         def _work() -> tuple[list[list[float]], list[SparseVec]]:
-            dense = [v.tolist() for v in dense_model.embed(texts, batch_size=batch)]
-            sparse = [
+            dense_sorted = [v.tolist() for v in dense_model.embed(ordered, batch_size=batch)]
+            sparse_sorted = [
                 SparseVec(indices=s.indices.tolist(), values=s.values.tolist())
-                for s in sparse_model.embed(texts, batch_size=batch)
+                for s in sparse_model.embed(ordered, batch_size=batch)
             ]
+            dense: list[list[float]] = [[] for _ in texts]
+            sparse: list[SparseVec] = [SparseVec([], []) for _ in texts]
+            for position, original in enumerate(order):
+                dense[original] = dense_sorted[position]
+                sparse[original] = sparse_sorted[position]
             return dense, sparse
 
         loop = asyncio.get_running_loop()

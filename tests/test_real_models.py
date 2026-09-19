@@ -100,3 +100,16 @@ async def test_hybrid_finds_an_exact_identifier(real_settings: Settings):
 
     await store.aclose()
     await embedder.aclose()
+
+
+async def test_length_sorted_batching_returns_vectors_in_input_order(real_settings: Settings):
+    """Texts are embedded shortest-first to keep batches uniform; each vector must
+    still come back aligned with its own text."""
+    embedder = FastEmbedder(real_settings)
+    texts = ["x = 1\n" * 200, "def short(): pass", "class Mid:\n    value = 2\n" * 10]
+    together, together_sparse = await embedder.embed_documents(texts)
+    for i, text in enumerate(texts):
+        (alone,), (alone_sparse,) = await embedder.embed_documents([text])
+        assert together[i] == pytest.approx(alone, abs=1e-4)
+        assert together_sparse[i].indices == alone_sparse.indices
+    await embedder.aclose()

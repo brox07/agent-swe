@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from git import InvalidGitRepositoryError, Repo
+from git import GitCommandError, InvalidGitRepositoryError, Repo
 from sqlalchemy import delete, select
 
 from src.config import Settings
@@ -94,17 +94,36 @@ def resolve_repo(settings: Settings, repo: str) -> RepoTarget:
     dirty = False
     origin_url: str | None = None
     try:
-        git_repo = Repo(target)
+        git_repo = open_repo(target)
         head_sha = git_repo.head.commit.hexsha if git_repo.head.is_valid() else None
         dirty = git_repo.is_dirty(untracked_files=False)
         if "origin" in {r.name for r in git_repo.remotes}:
             origin_url = next(iter(git_repo.remote("origin").urls), None)
     except InvalidGitRepositoryError:
         logger.info("%s is not a git repository; indexing as a plain directory", target)
+    except GitCommandError as exc:
+        raise SyncError(f"git failed reading {target}: {exc.stderr.strip() or exc}") from exc
 
     return RepoTarget(
         name=target.name, path=target, head_sha=head_sha, dirty=dirty, origin_url=origin_url
     )
+
+
+def open_repo(path: Path) -> Repo:
+    """Open a mounted repository, trusting it despite its foreign owner.
+
+    The engine runs as root while bind-mounted checkouts belong to the host user,
+    and git refuses to touch a repository owned by someone else. The exception is
+    scoped to this one path and passed as command-line config, so the container's
+    global git config is never loosened.
+    """
+    repo = Repo(path)
+    repo.git.update_environment(
+        GIT_CONFIG_COUNT="1",
+        GIT_CONFIG_KEY_0="safe.directory",
+        GIT_CONFIG_VALUE_0=str(path),
+    )
+    return repo
 
 
 def list_source_files(target: RepoTarget) -> list[Path]:
@@ -115,17 +134,17 @@ def list_source_files(target: RepoTarget) -> list[Path]:
     """
     paths: set[Path] = set()
     try:
-        git_repo = Repo(target.path)
-        tracked = git_repo.git.ls_files().splitlines()
-        untracked = git_repo.git.ls_files("--others", "--exclude-standard").splitlines()
-        for rel in (*tracked, *untracked):
-            if rel:
-                paths.add(Path(rel))
-    except Exception as exc:  # noqa: BLE001 - any git failure falls back to a plain walk
-        logger.debug("falling back to filesystem walk for %s: %s", target.path, exc)
+        git_repo = open_repo(target.path)
+    except InvalidGitRepositoryError:
         paths = {
             path.relative_to(target.path) for path in target.path.rglob("*") if path.is_file()
         }
+    else:
+        # A git failure propagates rather than falling back to a walk: the walk
+        # ignores .gitignore, so it would silently index everything git excludes.
+        tracked = git_repo.git.ls_files().splitlines()
+        untracked = git_repo.git.ls_files("--others", "--exclude-standard").splitlines()
+        paths = {Path(rel) for rel in (*tracked, *untracked) if rel}
 
     keep: list[Path] = []
     for rel in sorted(paths):

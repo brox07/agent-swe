@@ -83,6 +83,53 @@ class TestFileDiscovery:
         assert not any("node_modules" in f for f in files)
 
 
+class TestForeignOwnership:
+    """The engine runs as root; bind-mounted checkouts belong to the host user.
+
+    git refuses to operate on a repository owned by another user ("dubious
+    ownership"), so without an explicit exception every sync on a real deployment
+    crashed. ``GIT_TEST_ASSUME_DIFFERENT_OWNER`` is git's own switch for
+    reproducing that check without root.
+    """
+
+    @pytest.fixture(autouse=True)
+    def foreign_owner(self, monkeypatch):
+        monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+
+    def test_a_repo_owned_by_another_user_resolves(self, settings, git_repo):
+        target = resolve_repo(settings, "demo")
+        assert target.head_sha is not None
+
+    def test_a_repo_owned_by_another_user_still_honours_gitignore(self, settings, git_repo):
+        files = {p.as_posix() for p in list_source_files(resolve_repo(settings, "demo"))}
+        assert "src/auth.py" in files
+        assert "ignored/secret.py" not in files
+
+
+class TestGitFailure:
+    def test_a_git_failure_is_not_masked_by_a_filesystem_walk(
+        self, settings, git_repo, monkeypatch
+    ):
+        """A walk would ignore .gitignore and index whatever it excludes."""
+        from git import GitCommandError
+        from git.cmd import Git
+
+        def broken(self, *args, **kwargs):
+            raise GitCommandError("ls-files", 128)
+
+        target = resolve_repo(settings, "demo")
+        monkeypatch.setattr(Git, "ls_files", broken, raising=False)
+        with pytest.raises(GitCommandError):
+            list_source_files(target)
+
+    def test_a_plain_directory_is_still_walked(self, settings):
+        plain = settings.repos_root / "plain"
+        plain.mkdir(parents=True)
+        (plain / "app.py").write_text("def main():\n    return 1\n")
+        files = {p.as_posix() for p in list_source_files(resolve_repo(settings, "plain"))}
+        assert files == {"app.py"}
+
+
 @pytest.mark.usefixtures("database")
 class TestIncrementalSync:
     async def test_first_sync_indexes_the_tree(self, sync, store: QdrantStore, git_repo):

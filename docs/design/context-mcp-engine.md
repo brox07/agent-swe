@@ -136,8 +136,14 @@ Any device on the tailnet reaches Qdrant and Postgres with no credential.
 Two lower-cost mitigations are built in but left off by default, so tightening
 this later is configuration rather than a rewrite:
 
-- `MCP_AUTH_TOKEN` — when set, required as a bearer token on `/mcp`. Unset by default.
-- `EXPOSE_INFRA_PORTS` — when false, the 6333/5432 port mappings are dropped via a compose override. True by default.
+- `MCP_AUTH_TOKEN` — when set, required as a bearer token on `/mcp`. Unset by
+  default. `/health` stays open so Compose can probe it.
+- `INFRA_BIND` — `0.0.0.0` by default, publishing Qdrant and Postgres as the
+  specification describes. Setting it to `127.0.0.1` publishes them on the host's
+  loopback only, so other tailnet devices cannot reach them, while the engine
+  still talks to both over the internal Compose network. (See §8: an earlier plan
+  to drop the port mappings through a Compose override does not work, because
+  Compose appends `ports` entries rather than replacing them.)
 
 Separately, `ingest_document` (milestone 2) accepts an arbitrary local path or
 URL, which is a file-read and SSRF primitive exposed as a tool. Local paths will
@@ -238,26 +244,115 @@ Reasonable defaults, all cheap to change:
 
 ---
 
-## 7. To verify against pinned versions at implementation time
+## 7. Verification outcomes
 
-Claims below are from knowledge, not from a running environment, and are load-bearing:
+The five load-bearing claims were checked against the actually-installed
+packages. Four held; one was wrong.
 
-1. `jinaai/jina-embeddings-v2-base-code` appears in `TextEmbedding.list_supported_models()` for the pinned fastembed. If not, fall back to `nomic-ai/nomic-embed-text-v1.5` (768d, long context) and note the change.
-2. `BAAI/bge-reranker-base` appears in `TextCrossEncoder.list_supported_models()`.
-3. RRF fusion via `prefetch` + `FusionQuery` requires Qdrant >= 1.10; the spec's pin of v1.12.1 satisfies this.
-4. Tree-sitter's Python binding changed its `Language`/`Parser` construction across 0.22-0.24. Grammar packages and the core library are pinned together and the construction idiom matched to the pinned version.
-5. Mounting FastMCP's Streamable HTTP ASGI app inside FastAPI requires running its session manager from the host app's lifespan.
+| # | Claim | Outcome |
+|---|-------|---------|
+| 1 | `jinaai/jina-embeddings-v2-base-code` is served by the pinned fastembed | **Confirmed.** fastembed 0.8.0, `dim=768`, 0.64GB. No fallback needed. |
+| 2 | `BAAI/bge-reranker-base` is a supported cross-encoder | **Confirmed.** Present in `TextCrossEncoder.list_supported_models()`. |
+| 3 | RRF fusion over named dense+sparse vectors, with a payload filter | **Confirmed** on qdrant-client 1.19.1, exercised in the test suite. |
+| 4 | Tree-sitter construction idiom for the pinned grammars | **Confirmed** on tree-sitter 0.26.0: `Language(ts_python.language())` then `Parser(lang)`. `tree_sitter_typescript` exports `language_typescript()` and `language_tsx()`. |
+| 5 | FastMCP's Streamable HTTP app mounts inside FastAPI via its session manager | **Corrected.** See below. |
 
----
+### 7.1 Correction: FastMCP no longer exists under that name
 
-## 8. Milestone 1 definition of done
+`mcp` resolved to 2.2.0, which renamed `FastMCP` to `MCPServer`
+(`mcp.server.mcpserver.MCPServer`); importing `mcp.server.fastmcp` raises with a
+pointer to the migration guide. The 2.x API is adopted rather than pinning
+`mcp<2`. The session manager is created lazily by `streamable_http_app()` and is
+unreachable before that call, so the app factory runs in a fixed order:
+build the server, call `streamable_http_app()`, then run `session_manager` from
+the FastAPI lifespan.
 
-- `docker compose up` brings the stack to a healthy `/health`.
-- A bind-mounted repository indexes via `sync_repository`, with progress observable through `get_sync_status`.
-- `search_codebase` returns correct hits with exact line references, in both
-  `rerank=false` and `rerank=true` modes, and identifier queries beat the
-  dense-only baseline.
-- Re-syncing an unchanged repo is a no-op; changing one file re-indexes that
-  file only; deleting a file removes its vectors.
-- Claude Code connects to `/mcp` over the tailnet and calls the tools.
-- Parser tests over fixtures and retrieval tests over in-memory Qdrant pass.
+Every reference to "FastMCP" in the source specification should be read as
+`MCPServer`.
+
+### 7.2 New finding: the SDK would have rejected every Tailscale client
+
+`streamable_http_app()` defaults to `host="127.0.0.1"` and, seeing a localhost
+bind address, **auto-enables DNS-rebinding protection with only localhost Host
+headers allowed**. Clients reach this service on a tailnet IP, so every request
+would have been answered with `HTTP 421 Misdirected Request` — a failure that
+looks like a client bug and is invisible until something tries to connect from
+another machine.
+
+The policy is therefore always passed explicitly. `ALLOWED_HOSTS` is empty by
+default, which disables the check and logs a warning at startup; setting it to
+the `host:port` clients actually use re-enables protection. Both paths are
+covered by tests.
+
+## 8. Further departures decided during implementation
+
+- **`src/mcp_server/` instead of the spec's `src/mcp/`.** That directory name
+  shadows the installed `mcp` SDK package the moment `src/` is on `sys.path`.
+- **`chunk_total` added; `is_truncated` narrowed.** Splitting an oversized node
+  loses nothing, so `chunk_index`/`chunk_total` describe parts and `is_truncated`
+  is reserved for content genuinely dropped — which now happens only when a
+  single line exceeds the whole budget, as in a minified file.
+- **`EXPOSE_INFRA_PORTS` replaced by `INFRA_BIND`.** §3 originally promised an
+  env var that dropped the 6333/5432 mappings through a Compose override. Compose
+  *appends* `ports` entries on override and cannot remove them, so that would not
+  have worked. `INFRA_BIND=127.0.0.1` achieves the same end by publishing those
+  ports on the host's loopback only, out of reach of other tailnet devices.
+- **No module-level `app`.** Building the app at import time constructed a Qdrant
+  client and attempted a version handshake on mere import. The service runs as
+  `uvicorn src.main:create_app --factory`.
+- **`node_type` filter added to `search_codebase`,** and `interface` added to the
+  payload's node-type vocabulary, which the spec's enum omitted despite §4.1
+  calling for TypeScript interface extraction.
+- **Test-only dependencies:** `aiosqlite`, `httpx`, `asgi-lifespan`, so the
+  incremental-sync and MCP-protocol paths are testable without containers.
+
+### 8.1 Bug found by the test suite
+
+`git ls-files` still reports a tracked file after it is deleted from the working
+tree but before the deletion is committed. The first implementation therefore
+counted such a file as present, failed to read it, and left its vectors in Qdrant
+forever — the exact dev-loop case that motivated working-tree hashing. Files are
+now filtered on existence, and a file that cannot be read is deliberately not
+marked as seen so the prune path reclaims it.
+
+## 9. Verification status
+
+Passing locally, with no network and no containers required:
+
+- **69 tests green**, `ruff` clean across `src/`, `tests/`, and `alembic/`.
+  Coverage spans nested AST chunking and span boundaries, oversize splitting,
+  the Dockerfile/YAML fallbacks, hybrid RRF retrieval against a real in-memory
+  Qdrant, duplicate collapsing, the result budget, rerank ordering, incremental
+  sync (no-op re-sync, single-file change, deletion, shrink, new file), path
+  traversal refusal, job state transitions, and a full MCP handshake with
+  `tools/list` and `tools/call` over the real Streamable HTTP transport.
+- **Migration applies** and produces the expected schema.
+- **`docker compose config`** validates; `uv sync --frozen --no-dev` (the image's
+  build step) resolves; the `uvicorn ... --factory` target imports.
+
+Not verifiable in the development container, and therefore still open:
+
+- **`docker compose up` reaching a healthy `/health`** — no Docker daemon is
+  available in this environment.
+- **Real model load and inference** — the egress policy denies
+  `huggingface.co:443`, so the ~1GB download cannot complete. `tests/test_real_models.py`
+  covers this and is opt-in via `RUN_MODEL_TESTS=1`; it needs to be run on the
+  homelab host. Claims 1 and 2 above are verified at the level of the pinned
+  package's model registry, not of a completed download.
+- **Qdrant payload index creation** — local/in-memory Qdrant ignores payload
+  indexes and says so; the calls need a real server to take effect.
+- **Claude Code connecting over the tailnet.**
+
+## 10. Milestone 1 definition of done
+
+- [x] A bind-mounted repository indexes via `sync_repository`, with progress
+      observable through `get_sync_status`.
+- [x] `search_codebase` returns correct hits with exact line references in both
+      `rerank=false` and `rerank=true` modes.
+- [x] Re-syncing an unchanged repo is a no-op; changing one file re-indexes that
+      file only; deleting a file removes its vectors.
+- [x] Parser tests over fixtures and retrieval tests over in-memory Qdrant pass.
+- [ ] `docker compose up` brings the stack to a healthy `/health`. *(Blocked: no
+      Docker daemon here — needs a run on the target host.)*
+- [ ] Claude Code connects to `/mcp` over the tailnet and calls the tools.
+      *(Blocked: needs the deployed stack.)*

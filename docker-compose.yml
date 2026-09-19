@@ -1,0 +1,68 @@
+# The obsolete top-level `version:` key from the original spec is omitted; recent
+# Compose warns about it.
+
+services:
+  mcp-engine:
+    build: .
+    container_name: context-mcp-engine
+    restart: unless-stopped
+    ports:
+      - "${ENGINE_BIND:-0.0.0.0}:8000:8000"
+    environment:
+      POSTGRES_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/context_engine
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      FASTCACHE_DIR: /app/.cache
+      REPOS_ROOT: /app/repos
+      # Empty by default. The MCP SDK would otherwise auto-enable DNS-rebinding
+      # protection for localhost only and reject every Tailscale client with 421.
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-}"
+      # Empty by default: the tailnet is the trust boundary by explicit decision.
+      MCP_AUTH_TOKEN: "${MCP_AUTH_TOKEN:-}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    volumes:
+      # Repositories are mounted read-only and never cloned, so no git credential
+      # exists inside the container.
+      - "${REPOS_HOST_PATH:-./repos}:/app/repos:ro"
+      - ./data:/app/data
+      - model-cache:/app/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    container_name: context-qdrant
+    restart: unless-stopped
+    ports:
+      # Published as specified. INFRA_BIND=127.0.0.1 in .env restricts this to the
+      # host's loopback so other tailnet devices cannot reach Qdrant unauthenticated.
+      - "${INFRA_BIND:-0.0.0.0}:6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: context-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: context_engine
+    ports:
+      # Same note as Qdrant above.
+      - "${INFRA_BIND:-0.0.0.0}:5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  qdrant_storage:
+  pg_data:
+  model-cache:

@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from git import GitCommandError, InvalidGitRepositoryError, Repo
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from src.config import Settings
 from src.db.models import IndexedFile, Repository, SyncJob, SyncStatus
@@ -218,6 +218,27 @@ class SyncService:
                 "started_at": job.started_at.isoformat() if job.started_at else None,
                 "finished_at": job.finished_at.isoformat() if job.finished_at else None,
             }
+
+    async def fail_interrupted(self) -> int:
+        """Close out jobs a restart killed mid-run.
+
+        Jobs run as in-process tasks, so a restart ends them without a terminal
+        state; left alone they would report "running" forever and a client
+        polling get_sync_status would wait forever. Called once at startup,
+        before any new job can exist.
+        """
+        async with session_scope() as session:
+            result = await session.execute(
+                update(SyncJob)
+                .where(SyncJob.status.in_([SyncStatus.PENDING, SyncStatus.RUNNING]))
+                .values(
+                    status=SyncStatus.FAILED,
+                    phase="failed",
+                    error="interrupted by a server restart; start it again",
+                    finished_at=datetime.now(UTC),
+                )
+            )
+            return result.rowcount or 0
 
     # --- worker --------------------------------------------------------------
 

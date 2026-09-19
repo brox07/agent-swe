@@ -4,8 +4,9 @@ Note on the package name: the spec's layout put this at ``src/mcp/``, which
 shadows the installed ``mcp`` SDK package the moment ``src/`` ends up on
 sys.path. Renamed to ``src/mcp_server/`` to remove that footgun.
 
-Milestone 1 exposes the code path only. ``get_best_practices`` and
-``ingest_document`` arrive with milestone 2.
+Code: ``search_codebase``, ``sync_repository``. Documentation:
+``get_best_practices``, ``ingest_document``, ``list_doc_sources``. Both kinds of
+background job report through ``get_sync_status``.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
 from src.config import Settings
+from src.docs.ingest import DocIngestService
+from src.docs.sources import PRESETS, SOURCE_TYPES, SourceError
 from src.ingest.git_sync import SyncError, SyncService
 from src.vector.search import SearchService
 
@@ -24,14 +27,14 @@ logger = logging.getLogger(__name__)
 
 
 def build_mcp_server(
-    settings: Settings, search: SearchService, sync: SyncService
+    settings: Settings, search: SearchService, sync: SyncService, docs: DocIngestService
 ) -> MCPServer:
     mcp = MCPServer(
         name="context-mcp-engine",
         instructions=(
-            "Semantic, AST-aware retrieval over indexed source code. Results carry "
-            "exact file paths and line ranges; open the file directly when you need "
-            "more than the returned excerpt."
+            "Semantic, AST-aware retrieval over indexed source code, plus indexed "
+            "reference documentation and books. Code results carry exact file paths "
+            "and line ranges; documentation results carry the section and location."
         ),
     )
 
@@ -63,8 +66,9 @@ def build_mcp_server(
             bool,
             Field(
                 description=(
-                    "False returns fused hybrid results (~15ms). True scores a wider "
-                    "candidate set with a cross-encoder for better precision (~60ms)."
+                    "False returns fused hybrid results (tens of ms). True rescores a "
+                    "wider candidate set with a cross-encoder (~1s on CPU); use it when "
+                    "the default top hits look wrong."
                 )
             ),
         ] = False,
@@ -116,14 +120,118 @@ def build_mcp_server(
 
     @mcp.tool(
         name="get_sync_status",
-        description="Progress and outcome of a sync job started by sync_repository.",
+        description=(
+            "Progress and outcome of a background job started by sync_repository or "
+            "ingest_document."
+        ),
     )
     async def get_sync_status(
-        job_id: Annotated[str, Field(description="Job id returned by sync_repository.")],
+        job_id: Annotated[
+            str, Field(description="Job id returned by sync_repository or ingest_document.")
+        ],
     ) -> dict[str, Any]:
         status = await sync.status(job_id)
         if status is None:
             return {"error": f"no such job: {job_id}"}
         return status
+
+    @mcp.tool(
+        name="get_best_practices",
+        description=(
+            "Search indexed documentation and books: language and library reference, "
+            "tutorials, and guidance. Hybrid retrieval, so both questions ('how do I "
+            "cancel a task group') and exact names ('asyncio.TaskGroup') work. Each "
+            "result names its document, section, and location."
+        ),
+    )
+    async def get_best_practices(
+        topic: Annotated[str, Field(description="Question, concept, or API name.")],
+        framework: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Restrict to one framework, e.g. python, fastapi, pydantic, "
+                    "sqlalchemy, pytest. Call list_doc_sources to see what is indexed."
+                )
+            ),
+        ] = None,
+        version: Annotated[str | None, Field(description="Exact version tag, e.g. 3.14.")] = None,
+        source_type: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Restrict by format: epub or pdf for books, html_archive or github "
+                    "for reference documentation."
+                )
+            ),
+        ] = None,
+        rerank: Annotated[
+            bool, Field(description="Rescore candidates with a cross-encoder (~1s on CPU).")
+        ] = False,
+        limit: Annotated[int, Field(description="Maximum results.", ge=1, le=15)] = 3,
+    ) -> dict[str, Any]:
+        results = await search.search_docs(
+            topic,
+            framework=framework,
+            version=version,
+            source_type=source_type,
+            rerank=rerank,
+            limit=limit,
+        )
+        return {
+            "topic": topic,
+            "count": len(results),
+            "results": [r.to_dict() for r in results],
+        }
+
+    @mcp.tool(
+        name="ingest_document",
+        description=(
+            "Index documentation into the engine. Returns a job_id immediately; poll "
+            "get_sync_status. Accepts a preset name ("
+            + ", ".join(sorted(PRESETS))
+            + "), a path under the documents root (a single EPUB/PDF/Markdown file, or "
+            "a directory of books — EPUB is preferred where a title exists in both "
+            "formats), or an https URL on an allowlisted host. Unchanged sources are "
+            "skipped."
+        ),
+    )
+    async def ingest_document(
+        source_url: Annotated[
+            str,
+            Field(description="Preset name, path under the documents root, or https URL."),
+        ],
+        source_type: Annotated[
+            str | None,
+            Field(description="One of " + ", ".join(SOURCE_TYPES) + ". Inferred when omitted."),
+        ] = None,
+        framework: Annotated[
+            str | None, Field(description="Framework tag for filtering, e.g. python.")
+        ] = None,
+        version: Annotated[str | None, Field(description="Version tag, e.g. 3.14.")] = None,
+        title: Annotated[
+            str | None, Field(description="Display title; books use their own metadata.")
+        ] = None,
+        force: Annotated[bool, Field(description="Re-index even if unchanged.")] = False,
+    ) -> dict[str, Any]:
+        try:
+            return await docs.start(
+                source_url,
+                source_type=source_type,
+                framework=framework,
+                version=version,
+                title=title,
+                force=force,
+            )
+        except SourceError as exc:
+            return {"error": str(exc)}
+
+    @mcp.tool(
+        name="list_doc_sources",
+        description="Every indexed documentation source with its framework, version, and size.",
+    )
+    async def list_doc_sources() -> dict[str, Any]:
+        sources = await docs.list_sources()
+        return {"count": len(sources), "sources": sources, "presets": sorted(PRESETS)}
 
     return mcp

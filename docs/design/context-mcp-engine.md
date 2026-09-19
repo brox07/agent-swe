@@ -410,3 +410,63 @@ engine now reads `.env` through `env_file`.
 - [ ] Claude Code connects to `/mcp` over the tailnet and calls the tools.
       *(Stack verified over
       localhost; the tailnet leg is still open.)*
+
+## 11. Milestone 2 — documentation
+
+### 11.1 Sources
+
+Reference documentation comes from each project's own published artifact, never
+from crawling: docs.python.org's HTML archive, Read the Docs' htmlzip for pytest,
+docs.sqlalchemy.org's zip, and the Markdown sources on GitHub at a release tag
+for FastAPI and Pydantic (both publish MkDocs sites with no downloadable build).
+Presets pin each version so a re-ingest is reproducible.
+
+### 11.2 One sectioner for all HTML
+
+Sphinx pages and EPUB chapters are both HTML, so one walker handles both.
+Headings open sections; so do Sphinx API entries (`<dl class="py function">`
+and kin), one level below any heading, so `asyncio.open_connection` is its own
+chunk rather than a paragraph in a page-long "Streams" section. Heading level is
+`max(tag level, <section> nesting depth)`: O'Reilly EPUBs mark every level
+`<h1>` and nest `<section>`s instead, which by tag alone flattened "Chapter 5 >
+Infinite Recursion" to "Infinite Recursion".
+
+### 11.3 Chunking
+
+Sections pack into ~2000-character chunks; a chunk never spans two sections, so
+each has one heading trail, and that trail is embedded with the text. Code blocks
+are kept whole up to 6000 characters. Prose blocks over the target are split on
+lines — a PDF page has no paragraph breaks and would otherwise be one block.
+
+### 11.4 Defects found against real sources
+
+Each loader was run against the real source before being trusted:
+
+| Source | Defect | Effect had it shipped |
+|--------|--------|-----------------------|
+| pytest | Single-page build inlines every page inside `div.toctree-wrapper`, which was dropped as navigation | 8 sections from 1.3M characters |
+| FastAPI | Includes (`{* ../../docs_src/... *}`) resolve against the `mkdocs.yml` directory, not the page | 443 code examples replaced by placeholders |
+| FastAPI | `release-notes.md` | 42% of the corpus was changelog |
+| O'Reilly EPUB | Every heading level is `<h1>` | Chapter titles missing from every section trail |
+
+### 11.5 Throughput
+
+The dense model pads each batch to its longest text, so one long listing among
+short chunks made the whole batch pay for its length. Embedding in length order
+measured 1.5x faster on a real book (1.1k → 1.7k chars/s). Point ids derive from
+chunk position, so processing order does not affect what is stored; a real-model
+test asserts each vector still returns aligned with its text.
+
+### 11.6 Jobs and restarts
+
+Ingest reuses the sync job table and `get_sync_status`. Jobs are in-process
+tasks, so a restart ends them without a terminal state; startup now marks any
+`pending`/`running` job failed with a restart message, rather than leaving a
+poller waiting forever. One ingest runs at a time: embedding saturates the CPU.
+
+### 11.7 Security
+
+Local paths must resolve under `DOCS_ROOT` (`/app/data`). URLs must be https on
+a `DOCS_ALLOWED_HOSTS` entry or its subdomain, checked on every redirect hop.
+Downloads are capped at 300MB.
+

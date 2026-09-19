@@ -7,15 +7,24 @@ in `docs/design/context-mcp-engine.md`.
 
 - [ ] **Confirm Claude Code connects over the tailnet.** The stack is verified
       over localhost; the tailnet leg is not. Steps are in the README under
-      *Connecting from another machine over Tailscale*. Tailscale is installed on
-      the Windows host but was signed out as of this date.
+      *Connecting from another machine over Tailscale*. As of this date the
+      Windows Tailscale service was stuck in "starting" (`NoState`) with the
+      network itself fine; restarting the service is the next step.
 
-## Milestone 2 — documentation ingestion
+## Milestone 2 — documentation
 
-- [ ] `ingest_document` and `get_best_practices` over `best_practices_docs`
-      (collection and table already exist).
-- [ ] Sources: local EPUB and PDF books, and the official Python documentation.
-- [ ] A labelled query set for docs retrieval, built before tuning anything.
+- [x] `ingest_document`, `get_best_practices`, `list_doc_sources`.
+- [x] Loaders: Sphinx HTML archives, EPUB, PDF (bookmarks), Markdown from GitHub.
+- [x] Presets: Python 3.14, FastAPI, Pydantic, SQLAlchemy 2.0, pytest.
+- [ ] **First full ingest** of the 19 books and 5 presets — queued 2026-09-19.
+      Check `list_doc_sources` and the job statuses for failures.
+- [ ] **A labelled query set for docs retrieval**, before tuning anything:
+      chunk size, whether `rerank` helps here, whether books crowd out the
+      reference docs for API questions.
+- [ ] PDF-only books lose code formatting (text extraction flattens layout).
+      Only one book is PDF-only today; revisit if more arrive.
+- [ ] pytest's docs come from `stable`, so the version tag is `stable`, not a
+      number. Pin to a versioned download if the version filter matters.
 
 ## Retrieval quality
 
@@ -29,6 +38,12 @@ in `docs/design/context-mcp-engine.md`.
       text sits past the cap is scored as a miss.
 
 ## Performance
+
+- [ ] **Ingest throughput.** ~1.1k chars/s measured on a code-heavy book
+      against 3.6k for uniform prose; length-sorted batching recovered 1.5x.
+      Code tokenizes denser than prose, so some of the gap is real work. A
+      smaller or quantized dense model for docs is the next lever — but it means
+      a separate collection with its own vector size.
 
 - [ ] **First-index time.** 6m14s for 29 files / 234 chunks on a 6-core CPU.
       The dense model's 8k window is the cost. Worth measuring before indexing

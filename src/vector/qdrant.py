@@ -10,6 +10,7 @@ from typing import Any
 from qdrant_client import AsyncQdrantClient, models
 
 from src.config import Settings
+from src.docs.sections import DocChunk
 from src.parser.base import CodeChunk
 from src.vector.embedder import SparseVec
 
@@ -35,6 +36,9 @@ DOCS_PAYLOAD_INDEXES: dict[str, models.PayloadSchemaType] = {
     "framework": models.PayloadSchemaType.KEYWORD,
     "source_type": models.PayloadSchemaType.KEYWORD,
     "version": models.PayloadSchemaType.KEYWORD,
+    # Re-ingesting a source deletes its points by this, so it must not scan.
+    "source_url": models.PayloadSchemaType.KEYWORD,
+    "doc_title": models.PayloadSchemaType.KEYWORD,
 }
 
 
@@ -45,6 +49,10 @@ def point_id(repo_name: str, file_path: str, node_path: str, chunk_index: int) -
     duplicates on every re-index.
     """
     return str(uuid.uuid5(POINT_NAMESPACE, f"{repo_name}:{file_path}:{node_path}:{chunk_index}"))
+
+
+def doc_point_id(source_url: str, chunk_index: int) -> str:
+    return str(uuid.uuid5(POINT_NAMESPACE, f"doc:{source_url}:{chunk_index}"))
 
 
 @dataclass(slots=True)
@@ -185,6 +193,82 @@ class QdrantStore:
             wait=True,
         )
 
+    async def upsert_doc_chunks(
+        self,
+        *,
+        source_url: str,
+        source_type: str,
+        doc_title: str,
+        framework: str | None,
+        version: str | None,
+        link_base: str | None,
+        chunks: list[DocChunk],
+        dense: list[list[float]],
+        sparse: list[SparseVec],
+    ) -> int:
+        if not chunks:
+            return 0
+        points = [
+            models.PointStruct(
+                id=doc_point_id(source_url, chunk.chunk_index),
+                vector={
+                    DENSE_VECTOR: dense[i],
+                    SPARSE_VECTOR: models.SparseVector(
+                        indices=sparse[i].indices, values=sparse[i].values
+                    ),
+                },
+                payload={
+                    "doc_title": doc_title,
+                    "source_type": source_type,
+                    "source_url": source_url,
+                    "framework": framework,
+                    "version": version,
+                    "heading_hierarchy": chunk.heading_path,
+                    "location": chunk.location,
+                    "url": (link_base + chunk.location) if link_base else None,
+                    "chunk_index": chunk.chunk_index,
+                    "part": chunk.part,
+                    "parts": chunk.parts,
+                    "content": chunk.content,
+                },
+            )
+            for i, chunk in enumerate(chunks)
+        ]
+        await self._client.upsert(
+            collection_name=self._settings.docs_collection, points=points, wait=True
+        )
+        return len(points)
+
+    async def delete_doc_source(self, source_url: str) -> None:
+        await self._client.delete(
+            collection_name=self._settings.docs_collection,
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="source_url", match=models.MatchValue(value=source_url)
+                        )
+                    ]
+                )
+            ),
+            wait=True,
+        )
+
+    async def count_docs(self, source_url: str | None = None) -> int:
+        flt = None
+        if source_url:
+            flt = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="source_url", match=models.MatchValue(value=source_url)
+                    )
+                ]
+            )
+        result = await self._client.count(
+            collection_name=self._settings.docs_collection, count_filter=flt, exact=True
+        )
+        return result.count
+
     async def delete_repo(self, repo_name: str) -> None:
         await self._client.delete(
             collection_name=self._settings.codebase_collection,
@@ -224,6 +308,7 @@ class QdrantStore:
         sparse_query: SparseVec,
         limit: int,
         query_filter: models.Filter | None = None,
+        collection: str | None = None,
     ) -> list[Hit]:
         """Dense kNN and BM25 sparse, fused with Reciprocal Rank Fusion in Qdrant.
 
@@ -232,7 +317,7 @@ class QdrantStore:
         """
         prefetch_limit = max(limit * self._settings.prefetch_multiplier, limit)
         response = await self._client.query_points(
-            collection_name=self._settings.codebase_collection,
+            collection_name=collection or self._settings.codebase_collection,
             prefetch=[
                 models.Prefetch(
                     query=dense_query, using=DENSE_VECTOR, limit=prefetch_limit, filter=query_filter

@@ -33,6 +33,23 @@ class SearchResult:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class DocResult:
+    doc_title: str
+    section: str
+    location: str
+    url: str | None
+    framework: str | None
+    version: str | None
+    score: float
+    content: str
+    content_truncated: bool
+    part: str | None = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 def _is_ancestor(outer: str, inner: str) -> bool:
     """True if `outer` is an enclosing scope of `inner` (AuthService vs AuthService.login)."""
     return inner.startswith(outer + ".")
@@ -133,7 +150,66 @@ class SearchService:
             )
         return results
 
-    def _capped(self, content: str) -> tuple[str, bool]:
+    async def search_docs(
+        self,
+        topic: str,
+        *,
+        framework: str | None = None,
+        version: str | None = None,
+        source_type: str | None = None,
+        rerank: bool = False,
+        limit: int | None = None,
+    ) -> list[DocResult]:
+        limit = limit or self._settings.docs_default_limit
+        conditions = [
+            models.FieldCondition(key=key, match=models.MatchValue(value=value))
+            for key, value in (
+                ("framework", framework and framework.lower()),
+                ("version", version),
+                ("source_type", source_type),
+            )
+            if value
+        ]
+        query_filter = models.Filter(must=conditions) if conditions else None
+        fetch = self._settings.rerank_candidates if rerank else limit
+        dense_query, sparse_query = await self._embedder.embed_query(topic)
+        hits = await self._store.hybrid_search(
+            dense_query=dense_query,
+            sparse_query=sparse_query,
+            limit=fetch,
+            query_filter=query_filter,
+            collection=self._settings.docs_collection,
+        )
+        scores = [h.score for h in hits]
+        if rerank and hits:
+            texts = [self._capped(h.payload.get("content", ""))[0] for h in hits]
+            reranked = await self._embedder.rerank(topic, texts)
+            ranked = sorted(zip(hits, reranked, strict=True), key=lambda p: p[1], reverse=True)
+            hits = [h for h, _ in ranked]
+            scores = [sc for _, sc in ranked]
+
+        results: list[DocResult] = []
+        for hit, score in list(zip(hits, scores, strict=True))[:limit]:
+            payload = hit.payload
+            content, truncated = self._capped(payload.get("content", ""), noun="section")
+            parts = int(payload.get("parts", 1) or 1)
+            results.append(
+                DocResult(
+                    doc_title=payload.get("doc_title", ""),
+                    section=" > ".join(payload.get("heading_hierarchy") or []),
+                    location=payload.get("location", ""),
+                    url=payload.get("url"),
+                    framework=payload.get("framework"),
+                    version=payload.get("version"),
+                    score=round(float(score), 6),
+                    content=content,
+                    content_truncated=truncated,
+                    part=f"{int(payload.get('part', 0)) + 1}/{parts}" if parts > 1 else None,
+                )
+            )
+        return results
+
+    def _capped(self, content: str, noun: str = "file") -> tuple[str, bool]:
         """Bound what one hit can cost the caller's context window.
 
         Exact line references accompany every result, so the agent can open the
@@ -142,7 +218,7 @@ class SearchService:
         cap = self._settings.max_result_chars
         if len(content) <= cap:
             return content, False
-        return content[:cap].rstrip() + "\n... [truncated, open the file for the rest]", True
+        return content[:cap].rstrip() + f"\n... [truncated, open the {noun} for the rest]", True
 
     @staticmethod
     def _build_filter(

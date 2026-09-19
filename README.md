@@ -16,8 +16,10 @@ other MCP clients over a Tailscale network.
 `search_codebase`, with hybrid retrieval and incremental indexing. Verified end to
 end against a real Docker deployment; only the tailnet leg is unconfirmed.
 
-**Milestone 2: documentation — in progress.** `ingest_document` and
-`get_best_practices`, over the `best_practices_docs` collection.
+**Milestone 2: documentation — built, first ingest running.** `ingest_document`,
+`get_best_practices`, and `list_doc_sources`, over the `best_practices_docs`
+collection: EPUB and PDF books, the Python 3.14 docs, and FastAPI, Pydantic,
+SQLAlchemy and pytest.
 
 ## How it works
 
@@ -50,6 +52,7 @@ credential exists inside the container.
 
 ```bash
 cp .env.example .env
+mkdir -p data/books      # before the first `up`, or Docker creates data/ as root
 ```
 
 Then edit `.env`:
@@ -163,13 +166,53 @@ This repository is indexed in the `context-engine` MCP server as `<repo-name>`.
 Use `search_codebase` to locate code before reading files.
 ```
 
+### Documentation and books
+
+Ask in plain language — *"what do the docs say about cancelling an asyncio
+TaskGroup"*, *"search my Rust books for atomics ordering"* — and Claude Code calls
+`get_best_practices`. Each result names the document, the section trail (e.g.
+*Chapter 5. Conditionals and Recursion > Infinite Recursion*), a location (a page,
+chapter file, or anchor), and for the Python and SQLAlchemy docs a link.
+
+Filters: `framework` (`python`, `rust`, `fastapi`, `pydantic`, `sqlalchemy`,
+`pytest`, `security`, or whatever you tagged at ingest), `version`, and
+`source_type` (`epub`/`pdf` for books, `html_archive`/`github` for reference docs).
+
+**Adding documentation.** `ingest_document` takes one of:
+
+- **A preset name** — `python`, `fastapi`, `pydantic`, `sqlalchemy`, `pytest`.
+  Each is pinned to a version and downloaded from the official source: the
+  archive python.org publishes, the Read the Docs download, or the project's
+  Markdown docs on GitHub at a release tag.
+- **A path under `data/`** — a single book (`books/OReillys/effectiverust.epub`)
+  or a whole directory (`books`). Where a title exists as both EPUB and PDF, the
+  EPUB is used: it keeps chapter structure and code listings as markup, while
+  PDF text extraction loses both.
+- **An https URL** on a host in `DOCS_ALLOWED_HOSTS`.
+
+Pass `framework` so searches can be filtered by it. Ingestion is a background
+job — poll `get_sync_status` — and unchanged sources are skipped on a re-run;
+`force=true` re-embeds anyway.
+
+Books go in `data/books/` on the host. From Windows, paste
+`\\wsl$\Ubuntu\home\<you>\...\agent-swe\data\books` into Explorer.
+
+**How long it takes.** Embedding runs on CPU at very roughly 1–3k characters a
+second, slower for code-heavy text. A typical 400-page book takes 5–10 minutes;
+the Python docs about an hour; everything configured here, several hours. Jobs
+run one at a time. A restart kills running jobs; they're marked failed on the
+next start, so re-issue them.
+
 ### Tools
 
 | Tool | Purpose |
 |------|---------|
-| `search_codebase` | Hybrid semantic + lexical search. Filters: `repo_name`, `language`, `node_type`. Returns file paths with exact line ranges. `rerank=true` for cross-encoder rescoring. |
+| `search_codebase` | Hybrid semantic + lexical search over code. Filters: `repo_name`, `language`, `node_type`. Returns file paths with exact line ranges. `rerank=true` for cross-encoder rescoring. |
 | `sync_repository` | Index or re-index a mounted repository, by directory name. Returns a `job_id` immediately. |
-| `get_sync_status` | Progress and outcome of a sync job. |
+| `get_best_practices` | Hybrid search over documentation and books. Filters: `framework`, `version`, `source_type`. |
+| `ingest_document` | Index a preset, a book or directory of books, or an allowlisted URL. Returns a `job_id` immediately. |
+| `list_doc_sources` | What documentation is indexed, with versions and sizes. |
+| `get_sync_status` | Progress and outcome of any background job. |
 
 A first sync of a small repository (~30 files) takes a few minutes on CPU; the
 dense model's 8k-token window is the cost. Later syncs only touch changed files.
@@ -226,6 +269,12 @@ src/
 │   ├── generic_chunker.py   Dockerfile and YAML blocks
 │   └── base.py              chunk model, oversize splitting
 ├── ingest/git_sync.py   working-tree hashing, prune path, job tracking
+├── docs/
+│   ├── sources.py       presets, path containment, host allowlist, download
+│   ├── loaders.py       HTML archive, EPUB, Markdown/GitHub, PDF → sections
+│   ├── html.py          heading- and API-entry-aware HTML sectioning
+│   ├── sections.py      section → chunk packing; code blocks kept whole
+│   └── ingest.py        ingest jobs
 └── mcp_server/tools.py  tool registrations
 ```
 

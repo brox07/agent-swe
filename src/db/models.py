@@ -79,13 +79,15 @@ class IndexedFile(Base):
 
 
 class DocSource(Base):
-    """Ingested documentation source. Populated in milestone 2."""
+    """One ingested documentation source: a book, an archive, a docs directory."""
 
     __tablename__ = "doc_sources"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_url: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str | None] = mapped_column(Text)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     framework: Mapped[str | None] = mapped_column(String(64))
     version_tag: Mapped[str | None] = mapped_column(String(32))
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)

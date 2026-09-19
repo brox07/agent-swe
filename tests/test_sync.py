@@ -239,6 +239,19 @@ class TestJobTracking:
         assert "qdrant exploded" in status["error"]
         assert status["finished_at"] is not None
 
+    async def test_jobs_left_running_by_a_restart_are_marked_failed(self, sync):
+        from src.db.models import SyncJob
+        from src.db.postgres import session_scope
+
+        async with session_scope() as session:
+            session.add(SyncJob(id="stale", repo_name="demo", status=SyncStatus.RUNNING))
+            session.add(SyncJob(id="done", repo_name="demo", status=SyncStatus.SUCCEEDED))
+        assert await sync.fail_interrupted() == 1
+        stale = await sync.status("stale")
+        assert stale["status"] == SyncStatus.FAILED.value
+        assert "restart" in stale["error"]
+        assert (await sync.status("done"))["status"] == SyncStatus.SUCCEEDED.value
+
     async def test_unresolvable_repo_raises_before_a_job_is_created(self, sync):
         with pytest.raises(SyncError):
             await sync.start("../escape")

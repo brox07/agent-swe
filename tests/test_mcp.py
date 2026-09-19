@@ -20,6 +20,7 @@ from qdrant_client import AsyncQdrantClient
 from src.config import Settings
 from src.db.models import Base
 from src.db.postgres import dispose_engine, init_engine
+from src.docs.ingest import DocIngestService
 from src.ingest.git_sync import SyncService
 from src.main import AppState, create_app
 from src.vector.qdrant import QdrantStore
@@ -98,6 +99,7 @@ async def app_state(settings: Settings, embedder: StubEmbedder) -> AsyncIterator
     state.embedder = embedder
     state.search = SearchService(settings, state.store, embedder)
     state.sync = SyncService(settings, state.store, embedder)
+    state.docs = DocIngestService(settings, state.store, embedder)
     state.models_ready = False
 
     engine = init_engine(settings.postgres_url)
@@ -165,11 +167,18 @@ class TestTransport:
 
 
 class TestToolSurface:
-    async def test_all_three_milestone_tools_are_advertised(self, client: Client):
+    async def test_code_and_documentation_tools_are_advertised(self, client: Client):
         await client.initialize()
         listed = await client.call("tools/list")
         names = {tool["name"] for tool in listed["result"]["tools"]}
-        assert names == {"search_codebase", "sync_repository", "get_sync_status"}
+        assert names == {
+            "search_codebase",
+            "sync_repository",
+            "get_sync_status",
+            "get_best_practices",
+            "ingest_document",
+            "list_doc_sources",
+        }
 
     async def test_search_schema_exposes_the_documented_arguments(self, client: Client):
         await client.initialize()

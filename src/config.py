@@ -52,6 +52,26 @@ class Settings(BaseSettings):
     # unbounded slice of the client's context window.
     max_result_chars: int = 1500
 
+    # --- Documentation -------------------------------------------------------
+    # ingest_document reads local files only beneath this root: accepting any
+    # path from an MCP client would make the tool a file-read primitive.
+    docs_root: Path = Path("/app/data")
+    # And fetches only from these hosts (subdomains included), re-checked on every
+    # redirect, so it cannot be pointed at the internal network.
+    docs_allowed_hosts: str = (
+        "docs.python.org,docs.pytest.org,docs.sqlalchemy.org,github.com,readthedocs.io"
+    )
+    # Docs chunks are prose-sized rather than code-unit-sized: ~500 tokens keeps
+    # one idea per chunk, so a hit is an answer rather than a chapter.
+    doc_chunk_chars: int = 2000
+    # Code listings may run past the target up to this before they are split.
+    doc_max_chunk_chars: int = 6000
+    docs_default_limit: int = 3
+
+    @property
+    def docs_allowed_host_list(self) -> list[str]:
+        return [h.strip().lower() for h in self.docs_allowed_hosts.split(",") if h.strip()]
+
     # --- Execution -----------------------------------------------------------
     # ONNX inference is blocking and would stall the event loop, including the
     # MCP session keepalive, if run inline.

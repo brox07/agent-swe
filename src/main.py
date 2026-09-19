@@ -18,6 +18,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from src.config import Settings, get_settings
 from src.db.postgres import check_connection, dispose_engine, init_engine
+from src.docs.ingest import DocIngestService
 from src.ingest.git_sync import SyncService
 from src.mcp_server.tools import build_mcp_server
 from src.vector.embedder import FastEmbedder
@@ -36,6 +37,7 @@ class AppState:
         self.embedder = FastEmbedder(settings)
         self.search = SearchService(settings, self.store, self.embedder)
         self.sync = SyncService(settings, self.store, self.embedder)
+        self.docs = DocIngestService(settings, self.store, self.embedder)
         self.models_ready = False
 
 
@@ -49,7 +51,7 @@ def create_app(settings: Settings | None = None, state: AppState | None = None) 
     logging.basicConfig(level=settings.log_level.upper())
 
     state = state or AppState(settings)
-    mcp = build_mcp_server(settings, state.search, state.sync)
+    mcp = build_mcp_server(settings, state.search, state.sync, state.docs)
 
     # The SDK auto-enables DNS-rebinding protection when it sees a localhost bind
     # address, permitting only localhost Host headers. Clients reach this service
@@ -77,6 +79,9 @@ def create_app(settings: Settings | None = None, state: AppState | None = None) 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         init_engine(settings.postgres_url)
+        interrupted = await state.sync.fail_interrupted()
+        if interrupted:
+            logger.warning("marked %d jobs interrupted by the last restart as failed", interrupted)
         await state.store.ensure_collections()
         if settings.eager_model_load:
             # Warm before serving, so the first real query is not paying for a

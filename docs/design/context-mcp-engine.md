@@ -16,7 +16,7 @@ are numbered to match the source spec.
 | 1 | MCP transport | Streamable HTTP at `/mcp` | HTTP+SSE at `/sse` |
 | 2 | Dense embedding | `jinaai/jina-embeddings-v2-base-code`, 768d, 8k context | `BAAI/bge-small-en-v1.5`, 384d, 512 ctx |
 | 3 | Retrieval | Hybrid dense + BM25 sparse, fused server-side with RRF | Dense cosine only |
-| 4 | Reranking | `BAAI/bge-reranker-base` cross-encoder behind `rerank` flag | same |
+| 4 | Reranking | `Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder behind `rerank` flag (was `bge-reranker-base`; see §9) | `BAAI/bge-reranker-base` |
 | 5 | State store | PostgreSQL 16 + SQLAlchemy 2.0 async + Alembic | same |
 | 6 | Milestone 1 | Code path only: sync + search, end to end | All four tools at once |
 | 7 | Host | Homelab, 16GB+ RAM — both models resident, no quantization | unspecified |
@@ -81,7 +81,7 @@ Query pipeline:
    `limit * 5` candidates.
 2. RRF fusion in Qdrant.
 3. If `rerank=false`: collapse near-duplicates, return top `limit`. Target ~10-15ms.
-4. If `rerank=true`: take 25 fused candidates, score with the cross-encoder,
+4. If `rerank=true`: take 10 fused candidates (originally 25; see §9), score with the cross-encoder,
    return top `limit`. Target ~50-60ms.
 
 ### 2.4 Bind-mounted repositories (decision 9)
@@ -330,18 +330,72 @@ Passing locally, with no network and no containers required:
 - **`docker compose config`** validates; `uv sync --frozen --no-dev` (the image's
   build step) resolves; the `uvicorn ... --factory` target imports.
 
-Not verifiable in the development container, and therefore still open:
+Not verifiable in the development container. All but the last were since
+verified on a WSL2 host (6 cores, 23GB RAM, Docker 29.7) on 2026-09-19:
 
-- **`docker compose up` reaching a healthy `/health`** — no Docker daemon is
-  available in this environment.
-- **Real model load and inference** — the egress policy denies
-  `huggingface.co:443`, so the ~1GB download cannot complete. `tests/test_real_models.py`
-  covers this and is opt-in via `RUN_MODEL_TESTS=1`; it needs to be run on the
-  homelab host. Claims 1 and 2 above are verified at the level of the pinned
-  package's model registry, not of a completed download.
-- **Qdrant payload index creation** — local/in-memory Qdrant ignores payload
-  indexes and says so; the calls need a real server to take effect.
-- **Claude Code connecting over the tailnet.**
+- **`docker compose up` reaching a healthy `/health`** — verified. Healthy in
+  ~70s on first boot including the model download, ~20s after.
+- **Real model load and inference** — verified. `RUN_MODEL_TESTS=1` passes all
+  four tests.
+- **Qdrant payload index creation** — verified. Both collections carry their
+  keyword indexes on a real server.
+- **Claude Code connecting over the tailnet** — still open.
+
+The live run found a defect the suite could not: **every sync crashed on a real
+deployment.** The engine runs as root while bind-mounted checkouts belong to the
+host user, and git refuses a repository owned by someone else ("dubious
+ownership"). Tests create their repositories as the user running them, so the
+check never fired. Mounted repositories are now opened with `safe.directory`
+scoped to that one path, passed as command-line config so the container's git
+config is never loosened; `GIT_TEST_ASSUME_DIFFERENT_OWNER` reproduces the check
+in the suite. The same run exposed that any git failure in file listing fell
+back silently to a filesystem walk, which ignores `.gitignore`; git failures now
+fail the job instead, and only a directory that is not a repository is walked.
+
+Measured on that host, against this repository (29 files, 234 chunks):
+
+| Operation | Measured | Target (§2.3) |
+|-----------|----------|---------------|
+| First full index | 6m14s | — |
+| Re-sync, unchanged | 0.1s, 0 chunks written | no-op |
+| Search, `rerank=false` | 42–113ms | 10–15ms |
+| Search, `rerank=true` | 8–11s | 50–60ms |
+| Engine resident memory, just after indexing | 10.3GiB | — |
+
+**The rerank target is not reachable on CPU with `bge-reranker-base`.** The
+latency is pure inference — the same 25-pair batch takes ~12s on the host
+outside Docker — at roughly 0.5s per pair. Indexing cost has the same cause: the
+8k window that decision 2 bought is paid for on every long chunk.
+
+### 9.1 Reranker replaced
+
+Five supported cross-encoders were compared on 12 hand-labelled queries against
+this repository, each reranking the same 25 fused candidates:
+
+| Reranker | Params | MRR | Latency / query |
+|----------|--------|-----|-----------------|
+| *fusion only, no rerank* | — | 0.637 | — |
+| `BAAI/bge-reranker-base` | 278M | 0.561 | 13.7s |
+| `jinaai/jina-reranker-v1-turbo-en` | 38M | 0.549 | 2.9s |
+| `Xenova/ms-marco-MiniLM-L-6-v2` | 22M | 0.531 | 2.5s |
+| `jinaai/jina-reranker-v1-tiny-en` | 33M | 0.528 | 2.0s |
+| `Xenova/ms-marco-MiniLM-L-12-v2` | 33M | 0.521 | 5.0s |
+
+The quality differences between rerankers are within noise at 12 queries;
+the latency differences are not. `ms-marco-MiniLM-L-6-v2` was chosen as the
+smallest, with the most consistent worst case (no correct hit ranked below 5th).
+Fusion placed every correct hit it found within its top 7, so candidates were
+cut from 25 to 10. Measured live afterwards: **0.66–0.88s** per reranked query,
+down from 8–11s.
+
+**No reranker beat fusion alone on this set.** `rerank` stays off by default.
+Whether it earns its place should be settled against a larger labelled set over
+a real target repository, not this one; see `TODO.md`.
+
+The same run found that `docker-compose.yml` passed none of the model or
+retrieval settings in `.env` to the engine — `RERANKER_MODEL`, `DENSE_MODEL`,
+`RERANK_CANDIDATES` and the rest were documented but silently ignored. The
+engine now reads `.env` through `env_file`.
 
 ## 10. Milestone 1 definition of done
 
@@ -352,7 +406,7 @@ Not verifiable in the development container, and therefore still open:
 - [x] Re-syncing an unchanged repo is a no-op; changing one file re-indexes that
       file only; deleting a file removes its vectors.
 - [x] Parser tests over fixtures and retrieval tests over in-memory Qdrant pass.
-- [ ] `docker compose up` brings the stack to a healthy `/health`. *(Blocked: no
-      Docker daemon here — needs a run on the target host.)*
+- [x] `docker compose up` brings the stack to a healthy `/health`.
 - [ ] Claude Code connects to `/mcp` over the tailnet and calls the tools.
-      *(Blocked: needs the deployed stack.)*
+      *(Stack verified over
+      localhost; the tailnet leg is still open.)*

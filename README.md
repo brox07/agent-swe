@@ -3,19 +3,21 @@
 Semantic, AST-aware retrieval over your own codebases, exposed to Claude Code and
 other MCP clients over a Tailscale network.
 
-Design decisions and the reasoning behind each departure from the original
-specification are in [`docs/design/context-mcp-engine.md`](docs/design/context-mcp-engine.md).
-The specification itself is preserved in `docs/spec/`.
+| Document | What it's for |
+|----------|---------------|
+| This README | Setting it up and using it |
+| [`TODO.md`](TODO.md) | What's left, in priority order |
+| [`docs/design/context-mcp-engine.md`](docs/design/context-mcp-engine.md) | Why it's built this way; measured results |
+| `docs/spec/` | The original specification, preserved as written |
 
 ## Status
 
-**Milestone 1 (this release): the code path.** `sync_repository`,
-`get_sync_status`, and `search_codebase`, with hybrid retrieval and incremental
-indexing.
+**Milestone 1: the code path — done.** `sync_repository`, `get_sync_status`, and
+`search_codebase`, with hybrid retrieval and incremental indexing. Verified end to
+end against a real Docker deployment; only the tailnet leg is unconfirmed.
 
-**Milestone 2:** documentation ingestion — `ingest_document` and
-`get_best_practices`, over the `best_practices_docs` collection. The collection
-and its table are already created; the tools are not yet registered.
+**Milestone 2: documentation — in progress.** `ingest_document` and
+`get_best_practices`, over the `best_practices_docs` collection.
 
 ## How it works
 
@@ -27,7 +29,7 @@ and its table are already created; the tools are not yet registered.
           │
           ├── Tree-sitter        nested class/method chunking (Python, TypeScript)
           ├── line chunker       Dockerfile stages, Compose services
-          └── FastEmbed (ONNX)   jina-code dense 768d · BM25 sparse · bge reranker
+          └── FastEmbed (ONNX)   jina-code dense 768d · BM25 sparse · MiniLM reranker
           │
           ▼
   Qdrant (named dense+sparse vectors, RRF fusion)  +  PostgreSQL (hashes, jobs)
@@ -37,7 +39,9 @@ Retrieval fuses dense vector similarity with BM25 sparse matching using
 Reciprocal Rank Fusion inside Qdrant, in a single request. Dense similarity alone
 is weak at exact identifier lookup, which is the most common query against a code
 index; sparse alone misses conceptual queries. `rerank=true` additionally scores a
-wider candidate set with a cross-encoder.
+wider candidate set with a cross-encoder. On the hardware measured so far it
+costs ~0.7s per query and has not beaten fusion alone, so leave it off unless a
+query's top hits look wrong.
 
 ## Setup
 
@@ -45,14 +49,25 @@ Repositories are **bind-mounted read-only and never cloned**, so no git
 credential exists inside the container.
 
 ```bash
-cp .env.example .env          # then set REPOS_HOST_PATH
-mkdir -p repos
-ln -s /path/to/your/project repos/your-project   # or mount a parent directory
+cp .env.example .env
+```
 
+Then edit `.env`:
+
+- `REPOS_HOST_PATH` — a directory whose **subdirectories** are the repositories
+  to index. Pointing it at the folder that holds all your checkouts (e.g.
+  `~/code`) is simplest: each one is then addressable by its directory name.
+  Symlinks don't work here — a symlink inside the mount points at a path that
+  doesn't exist inside the container.
+- `INFRA_BIND=127.0.0.1` — recommended. See [Security posture](#security-posture).
+- `POSTGRES_HOST_PORT` / `QDRANT_HOST_PORT` — change these if something on the
+  host already uses 5432 or 6333. Only external tools see these ports.
+
+```bash
 docker compose up -d --build
 ```
 
-First boot downloads roughly 1GB of ONNX models into the `model-cache` volume.
+First boot downloads roughly 700MB of ONNX models into the `model-cache` volume.
 `/health` returns 503 until they are loaded, so the container is only reported
 healthy once it can actually serve a query. Subsequent starts reuse the cache.
 
@@ -60,23 +75,104 @@ healthy once it can actually serve a query. Subsequent starts reuse the cache.
 curl http://localhost:8000/health
 ```
 
-### Connecting Claude Code
+### Connecting Claude Code on the same machine
 
 ```bash
-claude mcp add --transport http context-engine http://<tailnet-ip>:8000/mcp
+claude mcp add --scope user --transport http context-engine http://localhost:8000/mcp
 ```
 
-If you set `ALLOWED_HOSTS`, it must include the exact `host:port` the client
-uses, or every request is answered with HTTP 421. Left empty, any Host header is
-accepted and a warning is logged at startup.
+`--scope user` makes it available in every project, not just the current
+directory. Run `/mcp` inside Claude Code to confirm it shows as connected.
 
-## Tools
+### Connecting from another machine over Tailscale
+
+Both machines join the same tailnet; the laptop then reaches the engine by the
+host's tailnet name. Nothing is exposed to the internet.
+
+**On the host** (the machine running Docker):
+
+1. Install Tailscale and sign in. On Windows, open Tailscale from the Start menu
+   or tray and choose **Log in**. On Linux: `sudo tailscale up`.
+2. On Windows, turn on **Preferences → Run unattended**, so the host stays on
+   the tailnet when you're signed out of Windows.
+3. Note the host's tailnet name and address:
+   ```bash
+   tailscale status        # first line: 100.x.y.z  <host-name>  ...
+   ```
+4. Keep the host reachable: set Windows sleep to **Never** while plugged in, and
+   enable Docker Desktop's **Start Docker Desktop when you sign in**. The
+   containers restart on their own (`restart: unless-stopped`).
+
+With Docker Desktop on Windows, published ports listen on Windows itself, and
+Docker Desktop installs a firewall rule allowing inbound traffic on them. You do
+not need Tailscale inside WSL.
+
+**On the laptop:**
+
+5. Install Tailscale and sign in with **the same account**.
+6. Check the engine is reachable (MagicDNS is on by default; use the `100.x`
+   address if the name doesn't resolve):
+   ```bash
+   curl http://<host-name>:8000/health       # expect "status":"ready"
+   ```
+7. Register it with Claude Code:
+   ```bash
+   claude mcp add --scope user --transport http context-engine http://<host-name>:8000/mcp
+   ```
+8. Start Claude Code, run `/mcp`, and confirm `context-engine` is connected.
+
+**Optional hardening.** Anyone on your tailnet can use the engine. If you share
+the tailnet with other people or devices, set a token in the host's `.env`:
+
+```bash
+MCP_AUTH_TOKEN=$(openssl rand -hex 32)      # then: docker compose up -d
+```
+
+and add it on the laptop:
+
+```bash
+claude mcp add --scope user --transport http context-engine http://<host-name>:8000/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+**If it doesn't connect:**
+
+| Symptom | Cause |
+|---------|-------|
+| `curl` times out | Host asleep, Tailscale signed out on one side, or a firewall. On the host, `tailscale ping <laptop-name>` should succeed. |
+| HTTP 421 | `ALLOWED_HOSTS` is set and doesn't include `<host-name>:*`. Leave it empty or add the name. |
+| HTTP 401 | `MCP_AUTH_TOKEN` is set and the laptop isn't sending it. |
+| `/health` returns 503 | Models still loading. Normal for ~20s after start, longer on first boot. |
+
+## Using it
+
+Index a repository once, then search it. In Claude Code you can simply ask —
+*"sync the agent-swe repository"*, *"search the codebase for where tokens are
+validated"* — and it will call the tools. Syncing is incremental, so re-run it
+whenever you want recent edits picked up; unchanged files cost nothing.
+
+Search results carry `repo_name`, a `file_path` relative to that repository, and
+exact `start_line`/`end_line`. Paths refer to the **host's** checkout: from a
+laptop, you need your own checkout of the repository to open the file.
+
+To make Claude Code reach for the engine without being asked, add a line to the
+project's `CLAUDE.md`:
+
+```markdown
+This repository is indexed in the `context-engine` MCP server as `<repo-name>`.
+Use `search_codebase` to locate code before reading files.
+```
+
+### Tools
 
 | Tool | Purpose |
 |------|---------|
-| `search_codebase` | Hybrid semantic + lexical search. Returns file paths with exact line ranges. `rerank=true` for cross-encoder precision. |
-| `sync_repository` | Index or re-index a mounted repository. Returns a `job_id` immediately. |
+| `search_codebase` | Hybrid semantic + lexical search. Filters: `repo_name`, `language`, `node_type`. Returns file paths with exact line ranges. `rerank=true` for cross-encoder rescoring. |
+| `sync_repository` | Index or re-index a mounted repository, by directory name. Returns a `job_id` immediately. |
 | `get_sync_status` | Progress and outcome of a sync job. |
+
+A first sync of a small repository (~30 files) takes a few minutes on CPU; the
+dense model's 8k-token window is the cost. Later syncs only touch changed files.
 
 Indexing is incremental: only files whose content hash changed are re-parsed,
 files removed from the working tree have their vectors deleted, and re-syncing an
@@ -85,9 +181,10 @@ than diffing commits, uncommitted edits are indexed too.
 
 ## Security posture
 
-The tailnet is the trust boundary, by explicit decision. Qdrant (6333) and
-Postgres (5432) are published as the specification describes, which means any
-device on the tailnet reaches them **with no credential**. Two switches tighten
+The tailnet is the trust boundary, by explicit decision. With the default
+`INFRA_BIND=0.0.0.0`, Qdrant (6333) and Postgres (5432) are published as the
+specification describes, which means any device on the tailnet reaches them
+**with no credential**. Two switches tighten
 this without code changes:
 
 - `INFRA_BIND=127.0.0.1` — Qdrant and Postgres become reachable only from the
@@ -100,14 +197,14 @@ this without code changes:
 
 ```bash
 uv sync --all-extras
-uv run pytest                 # 69 tests, no network or containers needed
+uv run pytest                 # 73 tests, no network or containers needed
 uv run ruff check src tests
 ```
 
 The suite runs against a real in-memory Qdrant with a deterministic stub
 embedder, so retrieval ordering is asserted exactly rather than depending on a
 downloaded model. Tests that exercise the real ONNX models are opt-in, because
-they need roughly 1GB of downloads:
+they need roughly 700MB of downloads:
 
 ```bash
 RUN_MODEL_TESTS=1 uv run pytest tests/test_real_models.py -v

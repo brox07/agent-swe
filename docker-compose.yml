@@ -6,6 +6,12 @@ services:
     build: .
     container_name: context-mcp-engine
     restart: unless-stopped
+    # Model and retrieval settings (DENSE_MODEL, RERANKER_MODEL, RERANK_CANDIDATES,
+    # ...) reach the engine from here. The environment block below takes
+    # precedence for the values Compose itself must wire up.
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "${ENGINE_BIND:-0.0.0.0}:8000:8000"
     environment:
@@ -39,7 +45,7 @@ services:
     ports:
       # Published as specified. INFRA_BIND=127.0.0.1 in .env restricts this to the
       # host's loopback so other tailnet devices cannot reach Qdrant unauthenticated.
-      - "${INFRA_BIND:-0.0.0.0}:6333:6333"
+      - "${INFRA_BIND:-0.0.0.0}:${QDRANT_HOST_PORT:-6333}:6333"
     volumes:
       - qdrant_storage:/qdrant/storage
 
@@ -53,7 +59,7 @@ services:
       POSTGRES_DB: context_engine
     ports:
       # Same note as Qdrant above.
-      - "${INFRA_BIND:-0.0.0.0}:5432:5432"
+      - "${INFRA_BIND:-0.0.0.0}:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:

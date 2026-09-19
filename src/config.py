@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     dense_model: str = "jinaai/jina-embeddings-v2-base-code"
     dense_dim: int = 768
     sparse_model: str = "Qdrant/bm25"
-    reranker_model: str = "BAAI/bge-reranker-base"
+    # 22M parameters. bge-reranker-base (278M) measured 8-11s per query on a
+    # 6-core CPU host with no quality gain over it; see design doc section 9.
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     fastcache_dir: Path = Path("/app/.cache")
 
     # The dense model's context window. Nodes exceeding it are sub-split rather
@@ -43,7 +45,9 @@ class Settings(BaseSettings):
     default_limit: int = 5
     # Each hybrid branch pulls limit * this many candidates before fusion.
     prefetch_multiplier: int = 5
-    rerank_candidates: int = 25
+    # Rerank cost is linear in candidates. Fusion placed every correct hit in
+    # its top 7 when measured, so 25 paid for candidates that never won.
+    rerank_candidates: int = 10
     # Ceiling on content returned per hit, so one search cannot consume an
     # unbounded slice of the client's context window.
     max_result_chars: int = 1500

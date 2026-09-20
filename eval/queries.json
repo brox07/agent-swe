@@ -1,0 +1,341 @@
+{
+  "code": [
+    {
+      "q": "where is a repository path checked so it cannot escape the mount root",
+      "file": "src/ingest/git_sync.py",
+      "symbol": "resolve_repo"
+    },
+    {
+      "q": "how are files listed for indexing",
+      "file": "src/ingest/git_sync.py",
+      "symbol": "list_source_files"
+    },
+    {
+      "q": "trust a git repository owned by another user",
+      "file": "src/ingest/git_sync.py",
+      "symbol": "open_repo"
+    },
+    {
+      "q": "mark jobs that a restart interrupted as failed",
+      "file": "src/ingest/git_sync.py",
+      "symbol": "SyncService.fail_interrupted"
+    },
+    {
+      "q": "incremental sync comparing content hashes and pruning deleted files",
+      "file": "src/ingest/git_sync.py",
+      "symbol": "SyncService._sync"
+    },
+    {
+      "q": "split a chunk that is larger than the model window",
+      "file": "src/parser/base.py",
+      "symbol": "split_oversized"
+    },
+    {
+      "q": "detect the language of a file from its extension",
+      "file": "src/parser/base.py",
+      "symbol": "detect_language"
+    },
+    {
+      "q": "nested class and method chunking with tree-sitter",
+      "file": "src/parser/tree_sitter_ast.py",
+      "symbol": "parse_code"
+    },
+    {
+      "q": "chunk a Dockerfile into build stages",
+      "file": "src/parser/generic_chunker.py",
+      "symbol": "parse_generic"
+    },
+    {
+      "q": "reciprocal rank fusion of dense and sparse prefetch branches",
+      "file": "src/vector/qdrant.py",
+      "symbol": "QdrantStore.hybrid_search"
+    },
+    {
+      "q": "deterministic point ids so re-indexing upserts instead of duplicating",
+      "file": "src/vector/qdrant.py",
+      "symbol": "point_id"
+    },
+    {
+      "q": "create collections with named vectors and payload indexes",
+      "file": "src/vector/qdrant.py",
+      "symbol": "QdrantStore._ensure"
+    },
+    {
+      "q": "delete every vector belonging to one file",
+      "file": "src/vector/qdrant.py",
+      "symbol": "QdrantStore.delete_file"
+    },
+    {
+      "q": "write documentation chunks into the docs collection",
+      "file": "src/vector/qdrant.py",
+      "symbol": "QdrantStore.upsert_doc_chunks"
+    },
+    {
+      "q": "collapse a class hit that overlaps its own method hit",
+      "file": "src/vector/search.py",
+      "symbol": "collapse_overlaps"
+    },
+    {
+      "q": "cap how much content one search result returns",
+      "file": "src/vector/search.py",
+      "symbol": "SearchService._capped"
+    },
+    {
+      "q": "search documentation with framework and version filters",
+      "file": "src/vector/search.py",
+      "symbol": "SearchService.search_docs"
+    },
+    {
+      "q": "rescore candidates with the cross encoder",
+      "file": "src/vector/search.py",
+      "symbol": "SearchService.search_codebase"
+    },
+    {
+      "q": "run ONNX inference off the event loop in a thread pool",
+      "file": "src/vector/embedder.py",
+      "symbol": "FastEmbedder._run"
+    },
+    {
+      "q": "embed in length order so batches are not padded",
+      "file": "src/vector/embedder.py",
+      "symbol": "FastEmbedder.embed_documents"
+    },
+    {
+      "q": "load the reranker model lazily",
+      "file": "src/vector/embedder.py",
+      "symbol": "FastEmbedder._get_reranker"
+    },
+    {
+      "q": "health endpoint reporting readiness while models load",
+      "file": "src/main.py",
+      "symbol": "create_app"
+    },
+    {
+      "q": "require a bearer token on the MCP endpoint",
+      "file": "src/main.py",
+      "symbol": "create_app"
+    },
+    {
+      "q": "DNS rebinding protection and allowed hosts for the transport",
+      "file": "src/main.py",
+      "symbol": "create_app"
+    },
+    {
+      "q": "register the MCP tools",
+      "file": "src/mcp_server/tools.py",
+      "symbol": "build_mcp_server"
+    },
+    {
+      "q": "allowlist of hosts documentation may be downloaded from",
+      "file": "src/docs/sources.py",
+      "symbol": "check_url"
+    },
+    {
+      "q": "expand a directory of books into one target per title",
+      "file": "src/docs/sources.py",
+      "symbol": "resolve_target"
+    },
+    {
+      "q": "parse a Sphinx page into sections by heading",
+      "file": "src/docs/html.py",
+      "symbol": "html_sections"
+    },
+    {
+      "q": "heading level from nested section elements",
+      "file": "src/docs/html.py",
+      "symbol": "_heading_level"
+    },
+    {
+      "q": "read chapters from an EPUB spine",
+      "file": "src/docs/loaders.py",
+      "symbol": "epub"
+    },
+    {
+      "q": "section a PDF using its bookmarks",
+      "file": "src/docs/loaders.py",
+      "symbol": "pdf"
+    },
+    {
+      "q": "resolve mkdocs include directives in markdown",
+      "file": "src/docs/loaders.py",
+      "symbol": "_expand_includes"
+    },
+    {
+      "q": "pack sections into chunks without splitting code",
+      "file": "src/docs/sections.py",
+      "symbol": "chunk_sections"
+    },
+    {
+      "q": "background job that ingests one document",
+      "file": "src/docs/ingest.py",
+      "symbol": "DocIngestService._ingest_one"
+    }
+  ],
+  "docs": [
+    {
+      "q": "how do I run coroutines concurrently and wait for all of them",
+      "title": "Python",
+      "section": "asyncio"
+    },
+    {
+      "q": "cancel every task in a group when one fails",
+      "title": "Python",
+      "section": "Task Groups"
+    },
+    {
+      "q": "read a file line by line without loading it into memory",
+      "title": "Python",
+      "section": "io"
+    },
+    {
+      "q": "what does functools.lru_cache do",
+      "title": "Python",
+      "section": "functools"
+    },
+    {
+      "q": "dataclass field with a default factory",
+      "title": "Python",
+      "section": "dataclasses"
+    },
+    {
+      "q": "pathlib check whether a path is inside another directory",
+      "title": "Python",
+      "section": "pathlib"
+    },
+    {
+      "q": "subprocess run capture output and check the return code",
+      "title": "Python",
+      "section": "subprocess"
+    },
+    {
+      "q": "structural pattern matching syntax",
+      "title": "Python",
+      "section": "match"
+    },
+    {
+      "q": "context manager protocol enter and exit",
+      "title": "Python",
+      "section": "context"
+    },
+    {
+      "q": "dependency injection with Depends",
+      "title": "FastAPI",
+      "section": "Depends"
+    },
+    {
+      "q": "return a custom status code and headers from a path operation",
+      "title": "FastAPI",
+      "section": "Response"
+    },
+    {
+      "q": "background tasks after returning a response",
+      "title": "FastAPI",
+      "section": "Background"
+    },
+    {
+      "q": "lifespan startup and shutdown events",
+      "title": "FastAPI",
+      "section": "Lifespan"
+    },
+    {
+      "q": "validate a field with a custom validator",
+      "title": "Pydantic",
+      "section": "validator"
+    },
+    {
+      "q": "settings loaded from environment variables",
+      "title": "Pydantic",
+      "section": "Settings"
+    },
+    {
+      "q": "serialize a model to a dictionary excluding unset fields",
+      "title": "Pydantic",
+      "section": "Serial"
+    },
+    {
+      "q": "async session and awaiting a query",
+      "title": "SQLAlchemy",
+      "section": "asyncio"
+    },
+    {
+      "q": "relationship lazy loading strategies",
+      "title": "SQLAlchemy",
+      "section": "Relationship Loading"
+    },
+    {
+      "q": "session begin commit and rollback semantics",
+      "title": "SQLAlchemy",
+      "section": "Session"
+    },
+    {
+      "q": "parametrize a test with several inputs",
+      "title": "pytest",
+      "section": "parametrize"
+    },
+    {
+      "q": "fixture scope and teardown with yield",
+      "title": "pytest",
+      "section": "fixture"
+    },
+    {
+      "q": "monkeypatch an attribute for one test",
+      "title": "pytest",
+      "section": "monkeypatch"
+    },
+    {
+      "q": "temporary directory fixture for a test",
+      "title": "pytest",
+      "section": "tmp_path"
+    },
+    {
+      "q": "profile which line of code is slow",
+      "title": "High Performance Python",
+      "section": "Profil"
+    },
+    {
+      "q": "why is a list slower than a numpy array",
+      "title": "High Performance Python",
+      "section": ""
+    },
+    {
+      "q": "generator expression versus list comprehension memory",
+      "title": "Learning Python",
+      "section": "Generator"
+    },
+    {
+      "q": "writing a test first then making it pass",
+      "title": "Test-Driven Development with Python",
+      "section": ""
+    },
+    {
+      "q": "atomic ordering relaxed versus sequentially consistent",
+      "title": "Rust Atomics and Locks",
+      "section": ""
+    },
+    {
+      "q": "borrow checker lifetimes in struct definitions",
+      "title": "Programming Rust",
+      "section": ""
+    },
+    {
+      "q": "spawning async tasks and futures in rust",
+      "title": "Async Rust",
+      "section": ""
+    },
+    {
+      "q": "parsing command line arguments in rust",
+      "title": "Command-Line Rust",
+      "section": ""
+    },
+    {
+      "q": "dataframe group by and aggregate",
+      "title": "Python for Data Analysis",
+      "section": ""
+    },
+    {
+      "q": "polars lazy frame versus eager evaluation",
+      "title": "Python Polars",
+      "section": ""
+    }
+  ]
+}

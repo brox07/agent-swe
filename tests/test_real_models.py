@@ -32,6 +32,9 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def real_settings(tmp_path) -> Settings:
     return Settings(
+        # Never read the developer's .env: a token or a path set there would
+        # otherwise decide what the tests exercise.
+        _env_file=None,
         postgres_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}",
         fastcache_dir=tmp_path.parent / "model-cache",
         repos_root=tmp_path / "repos",

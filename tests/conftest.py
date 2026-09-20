@@ -91,6 +91,9 @@ class StubEmbedder:
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return Settings(
+        # Never read the developer's .env: a token or a path set there would
+        # otherwise decide what the tests exercise.
+        _env_file=None,
         postgres_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}",
         dense_dim=STUB_DIM,
         repos_root=tmp_path / "repos",

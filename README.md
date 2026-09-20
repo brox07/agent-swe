@@ -212,6 +212,7 @@ next start, so re-issue them.
 | `get_best_practices` | Hybrid search over documentation and books. Filters: `framework`, `version`, `source_type`. |
 | `ingest_document` | Index a preset, a book or directory of books, or an allowlisted URL. Returns a `job_id` immediately. |
 | `list_doc_sources` | What documentation is indexed, with versions and sizes. |
+| `forget_document` | Drop one indexed source entirely: its vectors and its record. |
 | `get_sync_status` | Progress and outcome of any background job. |
 
 A first sync of a small repository (~30 files) takes a few minutes on CPU; the

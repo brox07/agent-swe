@@ -176,6 +176,7 @@ class TestToolSurface:
             "get_best_practices",
             "ingest_document",
             "list_doc_sources",
+            "forget_document",
         }
 
     async def test_search_schema_exposes_the_documented_arguments(self, client: Client):

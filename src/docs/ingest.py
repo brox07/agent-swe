@@ -20,7 +20,14 @@ from src.db.models import DocSource, SyncJob, SyncStatus
 from src.db.postgres import session_scope
 from src.docs import loaders
 from src.docs.sections import chunk_sections
-from src.docs.sources import DocTarget, SourceError, fetch, github_docs_path, resolve_target
+from src.docs.sources import (
+    PRESETS,
+    DocTarget,
+    SourceError,
+    fetch,
+    github_docs_path,
+    resolve_target,
+)
 from src.vector.embedder import Embedder
 from src.vector.qdrant import QdrantStore
 
@@ -90,6 +97,44 @@ class DocIngestService:
             "documents": [t.title for t in targets],
             "status": SyncStatus.PENDING.value,
             "hint": "Poll get_sync_status with this job_id.",
+        }
+
+    async def forget(self, source: str) -> dict:
+        """Remove one indexed source: its vectors and its row.
+
+        Re-ingesting replaces a source in place, so this exists for the other
+        case — a source that should no longer be searchable at all, which
+        otherwise could only be removed by editing the database by hand.
+        """
+        candidates = {source}
+        preset = PRESETS.get(source.lower())
+        if preset is not None:
+            candidates.add(preset.source_url)
+        if not source.startswith(("http://", "https://", "file://")):
+            candidates.add(f"file://{source.lstrip('/')}")
+
+        async with session_scope() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(DocSource).where(DocSource.source_url.in_(candidates))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            found = [(r.source_url, r.title, r.chunk_count) for r in rows]
+            for row in rows:
+                await session.delete(row)
+
+        if not found:
+            return {"error": f"no indexed source matches {source!r}", "removed": []}
+        for source_url, _, _ in found:
+            await self._store.delete_doc_source(source_url)
+        return {
+            "removed": [
+                {"title": title, "source_url": url, "chunks": count} for url, title, count in found
+            ]
         }
 
     async def list_sources(self) -> list[dict]:

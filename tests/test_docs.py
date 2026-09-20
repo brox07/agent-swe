@@ -458,6 +458,19 @@ class TestIngestion:
         assert status["files_done"] == 1
         assert "broken" in status["error"]
 
+    async def test_forget_removes_a_source_and_its_vectors(self, docs, sync, settings, store):
+        _write_book(settings)
+        await _wait(docs, sync, (await docs.start("books/guide.md"))["job_id"])
+        assert await store.count_docs("file://books/guide.md") == 2
+
+        removed = await docs.forget("books/guide.md")
+        assert removed["removed"][0]["chunks"] == 2
+        assert await store.count_docs("file://books/guide.md") == 0
+        assert await docs.list_sources() == []
+
+    async def test_forget_reports_an_unknown_source(self, docs):
+        assert "no indexed source" in (await docs.forget("books/never.md"))["error"]
+
     async def test_a_bad_source_fails_the_call_not_a_job(self, docs):
         with pytest.raises(SourceError):
             await docs.start("https://example.com/docs.zip")

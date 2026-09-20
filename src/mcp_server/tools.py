@@ -225,6 +225,22 @@ def build_mcp_server(
             return {"error": str(exc)}
 
     @mcp.tool(
+        name="forget_document",
+        description=(
+            "Remove an indexed documentation source: its vectors and its record. "
+            "Takes a preset name, a path under the documents root, or the exact "
+            "source_url shown by list_doc_sources. Re-ingesting replaces a source "
+            "in place, so this is only for dropping one entirely."
+        ),
+    )
+    async def forget_document(
+        source_url: Annotated[
+            str, Field(description="Preset name, path under the documents root, or source_url.")
+        ],
+    ) -> dict[str, Any]:
+        return await docs.forget(source_url)
+
+    @mcp.tool(
         name="list_doc_sources",
         description="Every indexed documentation source with its framework, version, and size.",
     )

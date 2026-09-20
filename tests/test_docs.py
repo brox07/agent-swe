@@ -418,6 +418,14 @@ class TestSources:
             "file://books/fluent.epub",
         }
 
+    def test_the_vault_title_comes_from_settings(self, settings, tmp_path):
+        settings.docs_root = tmp_path / "data"
+        settings.vault_title = "BroxWorx Vault"
+        (settings.docs_root / "vault" / ".obsidian").mkdir(parents=True)
+        (target,) = resolve_target(settings, "vault")
+        assert target.title == "BroxWorx Vault"
+        assert target.framework == "notes"
+
     def test_presets_resolve_by_name(self, settings):
         (target,) = resolve_target(settings, "Python")
         assert target.framework == "python"

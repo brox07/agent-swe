@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     # ("_Archive") or a path prefix ("Work/Old"). Superseded notes otherwise
     # compete with current ones on every query.
     vault_exclude: str = ""
+    # Display title for the vault. The mount is always /app/data/vault, so
+    # without this every result is titled "vault".
+    vault_title: str = ""
 
     @property
     def vault_exclude_list(self) -> list[str]:

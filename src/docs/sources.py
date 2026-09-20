@@ -176,7 +176,7 @@ def resolve_target(
             DocTarget(
                 source_url=f"file://{path.relative_to(settings.docs_root.resolve()).as_posix()}/",
                 source_type="vault",
-                title=title or path.name,
+                title=title or settings.vault_title or path.name,
                 framework=framework or "notes",
                 version=version,
                 local_path=path,

@@ -98,9 +98,10 @@ async def main() -> int:
                 await session.initialize()
                 if not args.repos:
                     print("vault:")
-                    if not await run_job(
-                        session, "ingest_document", {"source_url": "vault"}, "notes"
-                    ):
+                    arguments = {"source_url": "vault"}
+                    if env("VAULT_TITLE"):
+                        arguments["title"] = env("VAULT_TITLE")
+                    if not await run_job(session, "ingest_document", arguments, "notes"):
                         failures += 1
                 if not args.vault:
                     print("repositories:")

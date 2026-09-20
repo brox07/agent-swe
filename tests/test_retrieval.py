@@ -200,9 +200,7 @@ class TestHybridSearch:
 
 
 class TestResultBudget:
-    async def test_long_content_is_capped_and_flagged(
-        self, store, embedder, search, settings
-    ):
+    async def test_long_content_is_capped_and_flagged(self, store, embedder, search, settings):
         long_body = "def big():\n" + "".join(f"    line_{i} = {i}\n" for i in range(400))
         await index(store, embedder, "repo", "big.py", [chunk("big", long_body)])
         results = await search.search_codebase("big", limit=1)
@@ -219,9 +217,7 @@ class TestResultBudget:
 
 
 class TestRerank:
-    async def test_rerank_reorders_and_invokes_the_cross_encoder(
-        self, store, embedder, search
-    ):
+    async def test_rerank_reorders_and_invokes_the_cross_encoder(self, store, embedder, search):
         await index(
             store,
             embedder,

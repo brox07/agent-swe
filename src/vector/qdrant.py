@@ -80,9 +80,7 @@ class QdrantStore:
     # --- lifecycle -----------------------------------------------------------
 
     async def ensure_collections(self) -> None:
-        await self._ensure(
-            self._settings.codebase_collection, CODEBASE_PAYLOAD_INDEXES
-        )
+        await self._ensure(self._settings.codebase_collection, CODEBASE_PAYLOAD_INDEXES)
         await self._ensure(self._settings.docs_collection, DOCS_PAYLOAD_INDEXES)
 
     async def _ensure(self, name: str, indexes: dict[str, models.PayloadSchemaType]) -> None:
@@ -289,9 +287,7 @@ class QdrantStore:
         if repo_name:
             flt = models.Filter(
                 must=[
-                    models.FieldCondition(
-                        key="repo_name", match=models.MatchValue(value=repo_name)
-                    )
+                    models.FieldCondition(key="repo_name", match=models.MatchValue(value=repo_name))
                 ]
             )
         result = await self._client.count(

@@ -51,9 +51,7 @@ def build_mcp_server(
         query: Annotated[str, Field(description="Semantic query or symbol name.")],
         language: Annotated[
             str | None,
-            Field(
-                description="Filter by language: python, typescript, yaml, dockerfile."
-            ),
+            Field(description="Filter by language: python, typescript, yaml, dockerfile."),
         ] = None,
         repo_name: Annotated[
             str | None, Field(description="Restrict the search to one repository.")

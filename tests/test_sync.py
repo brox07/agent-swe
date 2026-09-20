@@ -154,9 +154,7 @@ class TestIncrementalSync:
         assert status["chunks_upserted"] == 0
         assert await store.count("demo") == count_after_first
 
-    async def test_force_reindexes_everything(
-        self, sync, embedder: StubEmbedder, git_repo
-    ):
+    async def test_force_reindexes_everything(self, sync, embedder: StubEmbedder, git_repo):
         await run_sync(sync)
         calls_after_first = embedder.embed_calls
         status = await run_sync(sync, force=True)
@@ -227,9 +225,7 @@ class TestJobTracking:
     async def test_unknown_job_id_returns_none(self, sync):
         assert await sync.status("does-not-exist") is None
 
-    async def test_failure_is_recorded_as_a_terminal_state(
-        self, sync, git_repo, monkeypatch
-    ):
+    async def test_failure_is_recorded_as_a_terminal_state(self, sync, git_repo, monkeypatch):
         async def boom(*args, **kwargs):
             raise RuntimeError("qdrant exploded")
 

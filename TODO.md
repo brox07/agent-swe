@@ -56,8 +56,7 @@ in `docs/design/context-mcp-engine.md`.
 
 ## Housekeeping
 
-- [ ] `ruff format` would rewrite 13 files. Run it once in its own commit so
-      later diffs stay readable.
+- [x] `ruff format` over the tree, in its own commit.
 - [ ] The model cache volume still holds `bge-reranker-base` (1.1GB) from before
       the switch. `docker compose down && docker volume rm agent-swe_model-cache`
       reclaims it at the cost of a ~700MB re-download.

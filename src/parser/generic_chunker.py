@@ -134,9 +134,7 @@ def _child_keys(section: list[str]) -> list[tuple[str, int]]:
     return found
 
 
-def parse_generic(
-    source_text: str, language: str, max_chunk_chars: int
-) -> list[CodeChunk]:
+def parse_generic(source_text: str, language: str, max_chunk_chars: int) -> list[CodeChunk]:
     if language == "dockerfile":
         return parse_dockerfile(source_text, max_chunk_chars)
     if language == "yaml":

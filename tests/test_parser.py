@@ -197,7 +197,7 @@ class TestGenericChunking:
         dockerfile = (
             "ARG PY=3.11\n\n"
             "FROM python:${PY}-slim AS builder\nRUN pip install uv\n\n"
-            "FROM python:${PY}-slim\nCMD [\"uvicorn\"]\n"
+            'FROM python:${PY}-slim\nCMD ["uvicorn"]\n'
         )
         paths = {c.node_path for c in parse_generic(dockerfile, "dockerfile", MAX)}
         assert "stage.builder" in paths

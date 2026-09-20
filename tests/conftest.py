@@ -177,8 +177,14 @@ export function createSession(userId: string): Session {
     (root / "ignored").mkdir()
     (root / "ignored" / "secret.py").write_text("def hidden():\n    return 1\n")
 
-    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-           "GIT_COMMITTER_EMAIL": "t@t", "HOME": str(root), "PATH": "/usr/bin:/bin"}
+    env = {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+        "HOME": str(root),
+        "PATH": "/usr/bin:/bin",
+    }
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True, env=env)
     subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=env)
     subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=root, check=True, env=env)

@@ -121,9 +121,7 @@ class FastEmbedder:
         if self._settings.eager_model_load:
             await self.rerank("warmup", ["def warmup(): ..."])
 
-    async def embed_documents(
-        self, texts: list[str]
-    ) -> tuple[list[list[float]], list[SparseVec]]:
+    async def embed_documents(self, texts: list[str]) -> tuple[list[list[float]], list[SparseVec]]:
         if not texts:
             return [], []
         dense_model = await self._get_dense()

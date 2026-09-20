@@ -72,9 +72,7 @@ def create_app(settings: Settings | None = None, state: AppState | None = None) 
 
     # streamable_http_app() must be called before session_manager is reachable:
     # the manager is created lazily by that call.
-    mcp_app = mcp.streamable_http_app(
-        host=settings.host, transport_security=transport_security
-    )
+    mcp_app = mcp.streamable_http_app(host=settings.host, transport_security=transport_security)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

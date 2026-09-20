@@ -115,9 +115,7 @@ def split_oversized(chunk: CodeChunk, max_chars: int) -> list[CodeChunk]:
     for i, part in enumerate(parts):
         body = "".join(part)
         header = (
-            ""
-            if i == 0
-            else f"{comment} {chunk.node_path} (part {i + 1}/{total}): {signature}\n"
+            "" if i == 0 else f"{comment} {chunk.node_path} (part {i + 1}/{total}): {signature}\n"
         )
         span = len(part)
         out.append(

@@ -114,9 +114,7 @@ async def client(settings: Settings, app_state: AppState) -> AsyncIterator[Clien
     app = create_app(settings, state=app_state)
     async with LifespanManager(app) as managed:
         transport = httpx.ASGITransport(app=managed.app)
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://localhost:8000"
-        ) as http:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost:8000") as http:
             yield Client(http)
 
 
@@ -185,9 +183,7 @@ class TestToolSurface:
         listed = await client.call("tools/list")
         tool = next(t for t in listed["result"]["tools"] if t["name"] == "search_codebase")
         properties = tool["inputSchema"]["properties"]
-        assert {"query", "language", "repo_name", "node_type", "rerank", "limit"} <= set(
-            properties
-        )
+        assert {"query", "language", "repo_name", "node_type", "rerank", "limit"} <= set(properties)
         assert tool["inputSchema"]["required"] == ["query"]
 
 

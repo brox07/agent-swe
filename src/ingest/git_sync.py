@@ -136,9 +136,7 @@ def list_source_files(target: RepoTarget) -> list[Path]:
     try:
         git_repo = open_repo(target.path)
     except InvalidGitRepositoryError:
-        paths = {
-            path.relative_to(target.path) for path in target.path.rglob("*") if path.is_file()
-        }
+        paths = {path.relative_to(target.path) for path in target.path.rglob("*") if path.is_file()}
     else:
         # A git failure propagates rather than falling back to a walk: the walk
         # ignores .gitignore, so it would silently index everything git excludes.
@@ -355,9 +353,7 @@ class SyncService:
     async def _upsert_repository(self, target: RepoTarget) -> int:
         async with session_scope() as session:
             repo = (
-                await session.execute(
-                    select(Repository).where(Repository.repo_name == target.name)
-                )
+                await session.execute(select(Repository).where(Repository.repo_name == target.name))
             ).scalar_one_or_none()
             if repo is None:
                 repo = Repository(repo_name=target.name)

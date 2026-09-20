@@ -25,9 +25,7 @@ def init_engine(url: str | None = None) -> AsyncEngine:
         settings = get_settings()
         target = url or settings.postgres_url
         # SQLite (used by the test suite) does not accept server-pool sizing.
-        pool_kwargs = (
-            {} if target.startswith("sqlite") else {"pool_size": 5, "max_overflow": 5}
-        )
+        pool_kwargs = {} if target.startswith("sqlite") else {"pool_size": 5, "max_overflow": 5}
         _engine = create_async_engine(target, pool_pre_ping=True, **pool_kwargs)
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine

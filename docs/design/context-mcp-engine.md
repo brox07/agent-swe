@@ -389,8 +389,21 @@ cut from 25 to 10. Measured live afterwards: **0.66–0.88s** per reranked query
 down from 8–11s.
 
 **No reranker beat fusion alone on this set.** `rerank` stays off by default.
-Whether it earns its place should be settled against a larger labelled set over
-a real target repository, not this one; see `TODO.md`.
+
+Settled later the same day against the labelled set in `eval/` — 34 code queries
+labelled by qualified node path rather than by substring of the returned text:
+
+| rerank | hit@1 | recall@5 | MRR@10 | median |
+|--------|-------|----------|--------|--------|
+| off    | 0.62  | 0.91     | 0.749  | 114ms  |
+| on     | 0.62  | 0.91     | 0.746  | 1522ms |
+
+Reranking is a wash on code for 13x the latency. Both earlier readings had been
+distorted by their labels: substring matching scored a correct hit as a miss
+when the match fell past the display cap, and requiring the exact node counted
+the enclosing class — a legitimate answer under nested chunking and overlap
+collapsing — as a miss. The documentation suite is unmeasured until the first
+ingest finishes.
 
 The same run found that `docker-compose.yml` passed none of the model or
 retrieval settings in `.env` to the engine — `RERANKER_MODEL`, `DENSE_MODEL`,

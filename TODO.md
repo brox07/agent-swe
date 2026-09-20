@@ -29,14 +29,15 @@ in `docs/design/context-mcp-engine.md`.
 
 ## Retrieval quality
 
-- [ ] **Build a real evaluation set.** The reranker choice rests on 12 queries
-      against this repository, and no reranker beat fusion alone (design doc
-      §9.1). 50+ labelled queries over a repository you actually work in would
-      settle whether `rerank` earns its place, and would catch regressions
-      from any future model change.
-- [ ] Label results by line span, not by a substring in the returned content:
-      content is capped at `MAX_RESULT_CHARS`, so a correct hit whose matching
-      text sits past the cap is scored as a miss.
+- [x] **A labelled evaluation set** — `eval/`, 34 code and 33 documentation
+      queries, with a baseline in `eval/README.md`. Labels are qualified node
+      paths, not spans or content substrings, both of which rot or mislead.
+- [ ] **Run the documentation suite** once the first ingest finishes, and
+      decide from it whether `rerank` helps on prose even though it is a wash
+      on code.
+- [ ] Extend the code suite to a second repository. Everything here is labelled
+      against the engine itself, which its own docstrings describe well; a
+      repository with worse comments is the harder test.
 
 ## Performance
 

@@ -47,11 +47,18 @@ def env(name: str, default: str = "") -> str:
 
 
 def repositories() -> list[str]:
-    """Directory names under the mounted repository root that are git checkouts."""
+    """Git checkouts under the mounted repository root, minus REFRESH_SKIP.
+
+    A repository large enough to destabilise the engine has no business in an
+    unattended nightly run; skip it here and sync it by hand when watching.
+    """
     root = Path(env("REPOS_HOST_PATH", str(ROOT / "repos")))
     if not root.is_dir():
         return []
-    return sorted(p.name for p in root.iterdir() if (p / ".git").exists())
+    skip = {name.strip() for name in env("REFRESH_SKIP").split(",") if name.strip()}
+    return sorted(
+        p.name for p in root.iterdir() if (p / ".git").exists() and p.name not in skip
+    )
 
 
 def result_of(response) -> dict:

@@ -67,6 +67,19 @@ in `docs/design/context-mcp-engine.md`.
 
 ## Performance
 
+- [ ] **Embedding memory grows without bound on a large repository.** Syncing
+      `odysseus` (942 files) drove anonymous memory from 0.9GB to 9.6GB in about
+      a minute and tripped the 10GB container limit three times; a restart
+      returns it to 0.86GB, so it is not the corpus, it is the process. Neither
+      serializing jobs nor capping batch size and characters bounded it, which
+      points at the ONNX runtime's CPU arena caching an allocation per input
+      shape and never releasing it. Candidates, cheapest first: recycle the
+      embedding session every N texts; bucket inputs to a handful of fixed
+      lengths so the shape set is small; run an ingest in a subprocess so the
+      memory returns at the end. Until then `odysseus` is excluded from
+      `scripts/refresh.py` via `REFRESH_SKIP` and should only be synced while
+      someone is watching.
+
 - [ ] **Ingest throughput.** ~1.1k chars/s measured on a code-heavy book
       against 3.6k for uniform prose; length-sorted batching recovered 1.5x.
       Code tokenizes denser than prose, so some of the gap is real work. A

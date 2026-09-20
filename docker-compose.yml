@@ -6,6 +6,10 @@ services:
     build: .
     container_name: context-mcp-engine
     restart: unless-stopped
+    # A backstop, not the fix: embedding is serialized in-process. Without a
+    # limit the host kernel picks the victim, and it once killed the engine
+    # mid-ingest at 21GB resident.
+    mem_limit: ${ENGINE_MEM_LIMIT:-10g}
     # Model and retrieval settings (DENSE_MODEL, RERANKER_MODEL, RERANK_CANDIDATES,
     # ...) reach the engine from here. The environment block below takes
     # precedence for the values Compose itself must wire up.

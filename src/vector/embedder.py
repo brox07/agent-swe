@@ -20,6 +20,9 @@ from src.config import Settings
 
 logger = logging.getLogger(__name__)
 
+# Module scope, so it bounds every job sharing this process.
+_bulk_embed = asyncio.Semaphore(1)
+
 
 class SparseVec(NamedTuple):
     indices: list[int]
@@ -124,6 +127,17 @@ class FastEmbedder:
     async def embed_documents(self, texts: list[str]) -> tuple[list[list[float]], list[SparseVec]]:
         if not texts:
             return [], []
+        # One bulk embed at a time across every job. Parallel jobs cannot go
+        # faster — they share one executor — but each holds its own batch and
+        # runtime arenas, and that is what grew the engine to 21GB resident and
+        # had the host kernel kill it mid-ingest. Queries use embed_query and
+        # are never held behind this.
+        async with _bulk_embed:
+            return await self._embed_documents(texts)
+
+    async def _embed_documents(
+        self, texts: list[str]
+    ) -> tuple[list[list[float]], list[SparseVec]]:
         dense_model = await self._get_dense()
         sparse_model = await self._get_sparse()
         batch = self._settings.embed_batch_size

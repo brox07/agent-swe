@@ -213,6 +213,27 @@ class TestIncrementalSync:
         assert await store.count("demo") == before + 1
 
 
+class TestEmbeddingIsSerialized:
+    async def test_two_jobs_do_not_embed_at_once(self):
+        """Concurrent jobs multiplied memory until the kernel killed the engine."""
+        from src.vector.embedder import FastEmbedder
+
+        embedder = FastEmbedder.__new__(FastEmbedder)
+        live, peak = 0, 0
+
+        async def fake(texts):
+            nonlocal live, peak
+            live += 1
+            peak = max(peak, live)
+            await asyncio.sleep(0.01)
+            live -= 1
+            return [], []
+
+        embedder._embed_documents = fake
+        await asyncio.gather(*(FastEmbedder.embed_documents(embedder, ["x"]) for _ in range(5)))
+        assert peak == 1
+
+
 @pytest.mark.usefixtures("database")
 class TestJobTracking:
     async def test_start_returns_a_job_handle_immediately(self, sync, git_repo):

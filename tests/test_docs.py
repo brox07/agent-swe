@@ -277,6 +277,15 @@ class TestObsidian:
         body = " ".join(s.text for s in loaders.obsidian_note(text, "n.md", "Mike"))
         assert "**Role:** DM" in body
 
+    def test_excluded_folders_are_left_out(self, tmp_path):
+        for folder in ("_Archive", "Work", "Work/Old"):
+            (tmp_path / folder).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "_Archive" / "Last Year.md").write_text("superseded")
+        (tmp_path / "Work" / "Current.md").write_text("current")
+        (tmp_path / "Work" / "Old" / "Stale.md").write_text("stale")
+        doc = loaders.vault(tmp_path, "V", exclude=["_Archive", "Work/Old"])
+        assert [s.heading_path for s in doc.sections] == [["Current"]]
+
     def test_editor_config_and_trash_are_skipped(self, tmp_path):
         (tmp_path / ".obsidian").mkdir()
         (tmp_path / ".trash").mkdir()

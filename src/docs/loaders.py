@@ -13,7 +13,7 @@ import re
 import tarfile
 import xml.etree.ElementTree as ET
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from src.docs.html import html_sections
@@ -304,18 +304,25 @@ def obsidian_note(text: str, rel_path: str, title: str) -> list[DocSection]:
     return markdown_sections(body, rel_path, base_path=[title])
 
 
-def vault(root, name: str):
+def excluded(rel, exclude: Sequence[str]) -> bool:
+    posix = rel.as_posix()
+    return any(e in rel.parts or posix.startswith(e + "/") for e in exclude)
+
+
+def vault(root, name: str, exclude: Sequence[str] = ()):
     """An Obsidian vault as one document: every note, in path order.
 
     The vault is a single source rather than one source per note, so a re-ingest
     replaces it wholesale and notes deleted since the last run take their chunks
     with them. That costs a full re-embed on any change, which is minutes at the
     scale of a personal vault.
+
+    ``exclude`` drops folders by name at any depth, or by path prefix.
     """
     sections: list[DocSection] = []
     for path in sorted(root.rglob("*.md")):
         rel = path.relative_to(root)
-        if any(part in VAULT_SKIP_DIRS for part in rel.parts):
+        if any(part in VAULT_SKIP_DIRS for part in rel.parts) or excluded(rel, exclude):
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="replace")

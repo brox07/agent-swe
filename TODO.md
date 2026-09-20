@@ -31,8 +31,7 @@ in `docs/design/context-mcp-engine.md`.
 
 - [x] Vault loader, ingested as one source so deletions prune; auth token on
       `/mcp`, since the vault holds personal notes.
-- [ ] Decide whether `_Archive` belongs in the index — 366 of 1121 chunks, and
-      old notes compete with current ones. Excluding it is a one-line skip.
+- [x] `_Archive` excluded via `VAULT_EXCLUDE`: 1121 chunks down to 755.
 - [ ] The vault re-embeds whole on any change (~5 minutes at 1121 chunks).
       Fine now; at ten times the size, switch to per-note sources with a prune
       pass over the ones that disappeared.

@@ -194,7 +194,9 @@ Filters: `framework` (`python`, `rust`, `fastapi`, `pydantic`, `sqlalchemy`,
   chunks on the next one; unchanged vaults are skipped. Notes are tagged
   `framework=notes`, each note's filename titles its sections (most notes have
   no H1), frontmatter `tags`/`type` stay searchable, wikilinks become their
-  display text, and `.obsidian` and `.trash` are skipped.
+  display text, and `.obsidian` and `.trash` are skipped. `VAULT_EXCLUDE` drops
+  further folders — an archive folder of superseded notes otherwise competes
+  with current ones on every query.
 
 Pass `framework` so searches can be filtered by it. Ingestion is a background
 job — poll `get_sync_status` — and unchanged sources are skipped on a re-run;

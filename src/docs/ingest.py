@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -44,12 +45,14 @@ _ingest_lock = asyncio.Lock()
 _running: set[asyncio.Task] = set()
 
 
-def vault_digest(root) -> str:
+def vault_digest(root, exclude: Sequence[str] = ()) -> str:
     """One hash over every note's path and content, so an unchanged vault skips."""
     digest = hashlib.sha256()
     for path in sorted(root.rglob("*.md")):
         rel = path.relative_to(root)
-        if any(part in loaders.VAULT_SKIP_DIRS for part in rel.parts):
+        if any(part in loaders.VAULT_SKIP_DIRS for part in rel.parts) or loaders.excluded(
+            rel, exclude
+        ):
             continue
         digest.update(rel.as_posix().encode())
         try:
@@ -59,7 +62,9 @@ def vault_digest(root) -> str:
     return digest.hexdigest()
 
 
-def load(target: DocTarget, data: bytes) -> loaders.LoadedDoc:
+def load(
+    target: DocTarget, data: bytes, exclude: Sequence[str] = ()
+) -> loaders.LoadedDoc:
     if target.source_type == "html_archive":
         return loaders.html_archive(data, target.title)
     if target.source_type == "github":
@@ -70,7 +75,7 @@ def load(target: DocTarget, data: bytes) -> loaders.LoadedDoc:
         return loaders.pdf(data, target.title)
     if target.source_type == "vault":
         assert target.local_path is not None
-        return loaders.vault(target.local_path, target.title)
+        return loaders.vault(target.local_path, target.title, exclude)
     if target.source_type == "markdown":
         page = target.local_path.name if target.local_path else target.source_url
         text = data.decode("utf-8", errors="replace")
@@ -210,7 +215,9 @@ class DocIngestService:
         if target.source_type == "vault":
             assert target.local_path is not None
             data = b""  # the loader reads the tree itself
-            digest = await asyncio.to_thread(vault_digest, target.local_path)
+            digest = await asyncio.to_thread(
+                vault_digest, target.local_path, self._settings.vault_exclude_list
+            )
         else:
             data = await fetch(self._settings, target)
             digest = hashlib.sha256(data).hexdigest()
@@ -231,7 +238,9 @@ class DocIngestService:
 
         await self._update(job_id, phase=f"parsing {name}")
         # Parsing Python's archive takes about a minute of CPU; off the loop.
-        loaded = await asyncio.to_thread(load, target, data)
+        loaded = await asyncio.to_thread(
+            load, target, data, self._settings.vault_exclude_list
+        )
         title = loaded.title if target.source_type in ("epub", "pdf") else target.title
         chunks = chunk_sections(
             loaded.sections,

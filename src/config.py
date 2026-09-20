@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     # Code listings may run past the target up to this before they are split.
     doc_max_chunk_chars: int = 6000
     docs_default_limit: int = 3
+    # Vault folders to leave out, comma separated: a folder name at any depth
+    # ("_Archive") or a path prefix ("Work/Old"). Superseded notes otherwise
+    # compete with current ones on every query.
+    vault_exclude: str = ""
+
+    @property
+    def vault_exclude_list(self) -> list[str]:
+        return [e.strip().strip("/") for e in self.vault_exclude.split(",") if e.strip()]
 
     @property
     def docs_allowed_host_list(self) -> list[str]:

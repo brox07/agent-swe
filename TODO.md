@@ -54,6 +54,13 @@ in `docs/design/context-mcp-engine.md`.
 - [ ] Plain search is 42–169ms against a 10–15ms target. Profile where the time
       goes (query embedding vs Qdrant) before deciding whether it matters.
 
+- [ ] **Serialize embedding work across job types.** Doc ingests take a global
+      lock, but repository syncs take only a per-repo one, so N syncs run at
+      once. They share a 2-worker inference pool, so nothing goes faster — but
+      each running job holds its own chunks and batches, and engine memory went
+      from 1.5GB to 7.2GB with six syncs and one ingest in flight (2026-09-19).
+      A single semaphore around embedding would bound that.
+
 ## Housekeeping
 
 - [x] `ruff format` over the tree, in its own commit.

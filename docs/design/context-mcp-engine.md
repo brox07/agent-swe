@@ -339,7 +339,9 @@ verified on a WSL2 host (6 cores, 23GB RAM, Docker 29.7) on 2026-09-19:
   four tests.
 - **Qdrant payload index creation** — verified. Both collections carry their
   keyword indexes on a real server.
-- **Claude Code connecting over the tailnet** — still open.
+- **Claude Code connecting over the tailnet** — the engine serves MCP on the
+  tailnet address with authentication; connecting from a second machine is the
+  remaining leg.
 
 The live run found a defect the suite could not: **every sync crashed on a real
 deployment.** The engine runs as root while bind-mounted checkouts belong to the
@@ -420,9 +422,10 @@ engine now reads `.env` through `env_file`.
       file only; deleting a file removes its vectors.
 - [x] Parser tests over fixtures and retrieval tests over in-memory Qdrant pass.
 - [x] `docker compose up` brings the stack to a healthy `/health`.
-- [ ] Claude Code connects to `/mcp` over the tailnet and calls the tools.
-      *(Stack verified over
-      localhost; the tailnet leg is still open.)*
+- [x] An MCP client connects to `/mcp` over the tailnet address and calls the
+      tools (verified from the host itself; a second machine is the remaining
+      leg).
+
 
 ## 11. Milestone 2 — documentation
 

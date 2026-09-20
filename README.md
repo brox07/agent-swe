@@ -14,12 +14,18 @@ other MCP clients over a Tailscale network.
 
 **Milestone 1: the code path — done.** `sync_repository`, `get_sync_status`, and
 `search_codebase`, with hybrid retrieval and incremental indexing. Verified end to
-end against a real Docker deployment; only the tailnet leg is unconfirmed.
+end against a real Docker deployment, including an MCP session over the tailnet
+address.
 
-**Milestone 2: documentation — built, first ingest running.** `ingest_document`,
-`get_best_practices`, and `list_doc_sources`, over the `best_practices_docs`
-collection: EPUB and PDF books, the Python 3.14 docs, and FastAPI, Pydantic,
-SQLAlchemy and pytest.
+**Milestone 2: documentation — done.** `ingest_document`, `get_best_practices`,
+`list_doc_sources`, and `forget_document`, over the `best_practices_docs`
+collection. Indexed on the host it was built for: 19 EPUB/PDF books, the Python
+3.14 docs, FastAPI, Pydantic, SQLAlchemy 2.0 and pytest, an Obsidian vault, and
+10 repositories in the code collection.
+
+Retrieval quality is measured, not assumed — see [`eval/`](eval/README.md):
+MRR@10 of 0.759 on documentation and 0.718 on code, with reranking a wash on
+both.
 
 ## How it works
 

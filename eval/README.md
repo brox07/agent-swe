@@ -9,7 +9,21 @@ Needs a running engine (`--url` to point elsewhere) with the repository and the
 documentation already indexed. `queries.json` holds the labels; see `run.py` for
 what counts as a hit and why.
 
-Baseline, 2026-09-19, 34 code queries against this repository:
+Baseline, 2026-09-19. Code: 34 queries, 10 repositories indexed. Docs: 33
+queries, 24 sources (19 books, 5 reference sets, 42k chunks).
+
+| suite | rerank | hit@1 | recall@5 | MRR@10 | median |
+|-------|--------|-------|----------|--------|--------|
+| code  | off    | 0.59  | 0.85     | 0.718  | 47ms   |
+| code  | on     | 0.62  | 0.85     | 0.728  | 757ms  |
+| docs  | off    | 0.64  | 0.88     | 0.759  | 61ms   |
+| docs  | on     | 0.64  | 0.85     | 0.743  | 915ms  |
+
+Reranking is a wash on both suites. Note the code numbers fell from MRR 0.749
+to 0.718 when nine more repositories were indexed: the same queries now compete
+against nine other codebases, which is the honest cost of a shared index.
+
+Earlier baseline, 34 code queries against this repository alone:
 
 | rerank | hit@1 | recall@5 | MRR@10 | median |
 |--------|-------|----------|--------|--------|

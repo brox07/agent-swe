@@ -174,47 +174,47 @@
   "docs": [
     {
       "q": "how do I run coroutines concurrently and wait for all of them",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "asyncio"
     },
     {
       "q": "cancel every task in a group when one fails",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "Task Groups"
     },
     {
       "q": "read a file line by line without loading it into memory",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "io"
     },
     {
       "q": "what does functools.lru_cache do",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "functools"
     },
     {
       "q": "dataclass field with a default factory",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "dataclasses"
     },
     {
       "q": "pathlib check whether a path is inside another directory",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "pathlib"
     },
     {
       "q": "subprocess run capture output and check the return code",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "subprocess"
     },
     {
       "q": "structural pattern matching syntax",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "match"
     },
     {
       "q": "context manager protocol enter and exit",
-      "title": "Python",
+      "title": "Python 3.14",
       "section": "context"
     },
     {

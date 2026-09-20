@@ -39,6 +39,23 @@ in `docs/design/context-mcp-engine.md`.
       against the engine itself, which its own docstrings describe well; a
       repository with worse comments is the harder test.
 
+- [ ] **Exact identifier lookup is weak on prose.** Searching `lru_cache` with
+      no filter returns a Polars chapter and an OrderedDict example; the
+      canonical `@functools.lru_cache(...)` entry ranks first only once
+      `framework=python` is set. Hybrid retrieval exists precisely for exact
+      names, so the sparse side is underperforming here — likely tokenization
+      splitting `lru_cache` into common terms. Worth checking against a
+      `MatchText` filter or an identifier payload field for docs.
+- [ ] **Cross-source competition.** With 24 sources indexed, a stdlib question
+      can be won by a framework's docs that merely mention the name (FastAPI's
+      `.env` page beat `functools` for "what does lru_cache do"). The filters
+      fix it, so the tool description should push harder toward `framework`;
+      a source-kind weighting (reference over book, or vice versa per query)
+      is the larger version of this.
+- [ ] Removing the Python docs' `whatsnew/` pages was tried and **reverted**:
+      docs MRR fell 0.759 to 0.728. Those pages answer real questions; the
+      crowding-out problem is the ranking issue above, not the pages.
+
 ## Performance
 
 - [ ] **Ingest throughput.** ~1.1k chars/s measured on a code-heavy book

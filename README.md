@@ -110,6 +110,25 @@ With Docker Desktop on Windows, published ports listen on Windows itself, and
 Docker Desktop installs a firewall rule allowing inbound traffic on them. You do
 not need Tailscale inside WSL.
 
+**On a new laptop, start to finish:**
+
+1. Install Tailscale, sign in with the same account, and confirm the host is
+   listed: `tailscale status` should show `broxworx-tuf` (or your host's name).
+2. Check the engine answers — no token needed for this:
+   ```bash
+   curl http://<host-name>:8000/health      # expect "status":"ready"
+   ```
+3. Register it with Claude Code, with the token from the host's `.env`:
+   ```bash
+   claude mcp add --scope user --transport http context-engine \
+     http://<host-name>:8000/mcp --header "Authorization: Bearer <token>"
+   ```
+4. Run `/mcp` in Claude Code and confirm `context-engine` is connected.
+
+Nothing else is needed: no checkout of this repository, no models, no API key.
+Search results name files and line ranges on the **host's** copy, so to open a
+file you still need that repository checked out locally.
+
 **On the laptop:**
 
 5. Install Tailscale and sign in with **the same account**.
@@ -137,6 +156,12 @@ and add it on the laptop:
 claude mcp add --scope user --transport http context-engine http://<host-name>:8000/mcp \
   --header "Authorization: Bearer <token>"
 ```
+
+**Keeping the host reachable.** Docker Desktop starts at sign-in, so the host
+must be signed in to Windows — locked is fine, signed out is not. Tailscale needs
+**Run unattended** for the same reason. A third-party VPN client on either
+machine can capture the routes Tailscale needs; that is the first thing to
+check if the tailnet works everywhere except here.
 
 **If it doesn't connect:**
 
@@ -244,6 +269,24 @@ this without code changes:
   regardless, so nothing breaks.
 - `MCP_AUTH_TOKEN=<secret>` — requires `Authorization: Bearer <secret>` on
   `/mcp`. `/health` stays open so Compose can probe it.
+
+## Keeping the index current
+
+Nothing watches the filesystem. `scripts/refresh.py` re-ingests the vault and
+re-syncs every mounted repository; both are content-hashed, so unchanged sources
+cost a scan and no embedding.
+
+```bash
+uv run python scripts/refresh.py            # vault and repositories
+uv run python scripts/refresh.py --vault    # notes only
+```
+
+To run it nightly, add a Windows Task Scheduler task (Docker Desktop must be
+running, so schedule it for a time the host is signed in):
+
+```
+wsl.exe -d Ubuntu -- bash -lc "cd ~/code/broxworx/agent-swe && uv run python scripts/refresh.py"
+```
 
 ## Development
 

@@ -27,6 +27,16 @@ in `docs/design/context-mcp-engine.md`.
 - [ ] pytest's docs come from `stable`, so the version tag is `stable`, not a
       number. Pin to a versioned download if the version filter matters.
 
+## Notes (Obsidian)
+
+- [x] Vault loader, ingested as one source so deletions prune; auth token on
+      `/mcp`, since the vault holds personal notes.
+- [ ] Decide whether `_Archive` belongs in the index — 366 of 1121 chunks, and
+      old notes compete with current ones. Excluding it is a one-line skip.
+- [ ] The vault re-embeds whole on any change (~5 minutes at 1121 chunks).
+      Fine now; at ten times the size, switch to per-note sources with a prune
+      pass over the ones that disappeared.
+
 ## Retrieval quality
 
 - [x] **A labelled evaluation set** — `eval/`, 34 code and 33 documentation

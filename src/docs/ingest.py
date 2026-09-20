@@ -28,6 +28,7 @@ from src.docs.sources import (
     github_docs_path,
     resolve_target,
 )
+from src.errors import describe
 from src.vector.embedder import Embedder
 from src.vector.qdrant import QdrantStore
 
@@ -43,6 +44,21 @@ _ingest_lock = asyncio.Lock()
 _running: set[asyncio.Task] = set()
 
 
+def vault_digest(root) -> str:
+    """One hash over every note's path and content, so an unchanged vault skips."""
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*.md")):
+        rel = path.relative_to(root)
+        if any(part in loaders.VAULT_SKIP_DIRS for part in rel.parts):
+            continue
+        digest.update(rel.as_posix().encode())
+        try:
+            digest.update(path.read_bytes())
+        except OSError:
+            continue
+    return digest.hexdigest()
+
+
 def load(target: DocTarget, data: bytes) -> loaders.LoadedDoc:
     if target.source_type == "html_archive":
         return loaders.html_archive(data, target.title)
@@ -52,6 +68,9 @@ def load(target: DocTarget, data: bytes) -> loaders.LoadedDoc:
         return loaders.epub(data, target.title)
     if target.source_type == "pdf":
         return loaders.pdf(data, target.title)
+    if target.source_type == "vault":
+        assert target.local_path is not None
+        return loaders.vault(target.local_path, target.title)
     if target.source_type == "markdown":
         page = target.local_path.name if target.local_path else target.source_url
         text = data.decode("utf-8", errors="replace")
@@ -165,7 +184,7 @@ class DocIngestService:
                     written = await self._ingest_one(job_id, target, force)
                 except Exception as exc:  # noqa: BLE001 - one bad book must not sink the rest
                     logger.exception("ingest of %s failed", target.source_url)
-                    failures.append(f"{target.title}: {exc}")
+                    failures.append(f"{target.title}: {describe(exc)}")
                     continue
                 if written is None:
                     skipped += 1
@@ -188,8 +207,13 @@ class DocIngestService:
         """Returns chunks written, or None when the source was unchanged."""
         name = target.title[:40]
         await self._update(job_id, phase=f"fetching {name}")
-        data = await fetch(self._settings, target)
-        digest = hashlib.sha256(data).hexdigest()
+        if target.source_type == "vault":
+            assert target.local_path is not None
+            data = b""  # the loader reads the tree itself
+            digest = await asyncio.to_thread(vault_digest, target.local_path)
+        else:
+            data = await fetch(self._settings, target)
+            digest = hashlib.sha256(data).hexdigest()
 
         async with session_scope() as session:
             existing = (

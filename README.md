@@ -124,8 +124,8 @@ not need Tailscale inside WSL.
    ```
 8. Start Claude Code, run `/mcp`, and confirm `context-engine` is connected.
 
-**Optional hardening.** Anyone on your tailnet can use the engine. If you share
-the tailnet with other people or devices, set a token in the host's `.env`:
+**Authentication.** Anyone on your tailnet can otherwise use the engine, which
+matters once personal notes are indexed. Set a token in the host's `.env`:
 
 ```bash
 MCP_AUTH_TOKEN=$(openssl rand -hex 32)      # then: docker compose up -d
@@ -189,6 +189,12 @@ Filters: `framework` (`python`, `rust`, `fastapi`, `pydantic`, `sqlalchemy`,
   EPUB is used: it keeps chapter structure and code listings as markup, while
   PDF text extraction loses both.
 - **An https URL** on a host in `DOCS_ALLOWED_HOSTS`.
+- **An Obsidian vault** — set `VAULT_HOST_PATH` in `.env` and ingest `vault`.
+  The whole vault is one source, so notes deleted since the last run lose their
+  chunks on the next one; unchanged vaults are skipped. Notes are tagged
+  `framework=notes`, each note's filename titles its sections (most notes have
+  no H1), frontmatter `tags`/`type` stay searchable, wikilinks become their
+  display text, and `.obsidian` and `.trash` are skipped.
 
 Pass `framework` so searches can be filtered by it. Ingestion is a background
 job — poll `get_sync_status` — and unchanged sources are skipped on a re-run;

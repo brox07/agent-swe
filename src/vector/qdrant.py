@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 from src.config import Settings
 from src.docs.sections import DocChunk
@@ -51,6 +54,33 @@ def point_id(repo_name: str, file_path: str, node_path: str, chunk_index: int) -
     return str(uuid.uuid5(POINT_NAMESPACE, f"{repo_name}:{file_path}:{node_path}:{chunk_index}"))
 
 
+async def with_retry(operation, what: str, attempts: int = 3):
+    """Retry a Qdrant write through a transient failure.
+
+    A long ingest issues thousands of writes; one timed-out upsert should cost a
+    few seconds, not the whole job. Timeouts and connection errors are retried,
+    and nothing else — a malformed request would only fail again.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return await operation()
+        except (httpx.TimeoutException, httpx.NetworkError, ResponseHandlingException) as exc:
+            if attempt == attempts:
+                raise
+            delay = 2.0 * attempt
+            logger.warning(
+                "%s failed (%s: %s); retrying in %.0fs (attempt %d/%d)",
+                what,
+                type(exc).__name__,
+                exc or "no detail",
+                delay,
+                attempt,
+                attempts,
+            )
+            await asyncio.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 def doc_point_id(source_url: str, chunk_index: int) -> str:
     return str(uuid.uuid5(POINT_NAMESPACE, f"doc:{source_url}:{chunk_index}"))
 
@@ -66,7 +96,9 @@ class QdrantStore:
     def __init__(self, settings: Settings, client: AsyncQdrantClient | None = None) -> None:
         self._settings = settings
         self._client = client or AsyncQdrantClient(
-            host=settings.qdrant_host, port=settings.qdrant_port
+            host=settings.qdrant_host,
+            port=settings.qdrant_port,
+            timeout=settings.qdrant_timeout,
         )
 
     @property
@@ -162,8 +194,11 @@ class QdrantStore:
             )
             for i, chunk in enumerate(chunks)
         ]
-        await self._client.upsert(
-            collection_name=self._settings.codebase_collection, points=points, wait=True
+        await with_retry(
+            lambda: self._client.upsert(
+                collection_name=self._settings.codebase_collection, points=points, wait=True
+            ),
+            f"upsert {len(points)} code chunks for {file_path}",
         )
         return len(points)
 
@@ -232,8 +267,11 @@ class QdrantStore:
             )
             for i, chunk in enumerate(chunks)
         ]
-        await self._client.upsert(
-            collection_name=self._settings.docs_collection, points=points, wait=True
+        await with_retry(
+            lambda: self._client.upsert(
+                collection_name=self._settings.docs_collection, points=points, wait=True
+            ),
+            f"upsert {len(points)} doc chunks for {doc_title}",
         )
         return len(points)
 

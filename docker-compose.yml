@@ -31,6 +31,9 @@ services:
       # exists inside the container.
       - "${REPOS_HOST_PATH:-./repos}:/app/repos:ro"
       - ./data:/app/data
+      # An Obsidian vault, read-only. Unset by default: the bind falls back to a
+      # directory inside ./data, so Compose does not fail when there is no vault.
+      - "${VAULT_HOST_PATH:-./data/vault}:/app/data/vault:ro"
       - model-cache:/app/.cache
     depends_on:
       postgres:

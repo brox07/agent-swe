@@ -23,6 +23,7 @@ from sqlalchemy import delete, select, update
 from src.config import Settings
 from src.db.models import IndexedFile, Repository, SyncJob, SyncStatus
 from src.db.postgres import session_scope
+from src.errors import describe
 from src.parser.base import CodeChunk, detect_language
 from src.parser.generic_chunker import parse_generic
 from src.parser.tree_sitter_ast import parse_code
@@ -247,7 +248,7 @@ class SyncService:
                 await self._sync(job_id, target, force)
             except Exception as exc:  # noqa: BLE001 - terminal state must be recorded
                 logger.exception("sync job %s failed", job_id)
-                await self._finish(job_id, SyncStatus.FAILED, error=str(exc))
+                await self._finish(job_id, SyncStatus.FAILED, error=describe(exc))
 
     async def _sync(self, job_id: str, target: RepoTarget, force: bool) -> None:
         await self._update(job_id, status=SyncStatus.RUNNING, phase="scanning")

@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     postgres_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/context_engine"
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
+    # The client defaults to a few seconds, which a wait=true upsert exceeds while
+    # Qdrant is indexing under a parallel job — it killed a documentation ingest
+    # and a repository sync at once, with httpx's empty timeout message as the
+    # only evidence.
+    qdrant_timeout: int = 120
     qdrant_grpc_port: int = 6334
     codebase_collection: str = "codebase_index"
     docs_collection: str = "best_practices_docs"

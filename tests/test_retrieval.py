@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.parser.base import CodeChunk
 from src.vector.qdrant import Hit, QdrantStore, point_id
 from src.vector.search import collapse_overlaps
@@ -254,3 +256,63 @@ class TestDeletion:
         await store.delete_repo("alpha")
         assert await store.count("alpha") == 0
         assert await store.count("beta") == 1
+
+
+class TestTransientQdrantFailures:
+    """A long ingest issues thousands of writes; one timeout must not end it."""
+
+    async def test_a_timed_out_write_is_retried(self, monkeypatch):
+        import httpx
+
+        from src.vector import qdrant as qdrant_module
+
+        monkeypatch.setattr(qdrant_module.asyncio, "sleep", _no_sleep)
+        attempts = []
+
+        async def flaky():
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise httpx.ReadTimeout("")
+            return "written"
+
+        assert await qdrant_module.with_retry(flaky, "upsert") == "written"
+        assert len(attempts) == 3
+
+    async def test_it_gives_up_and_raises_the_original(self, monkeypatch):
+        import httpx
+
+        from src.vector import qdrant as qdrant_module
+
+        monkeypatch.setattr(qdrant_module.asyncio, "sleep", _no_sleep)
+
+        async def always_times_out():
+            raise httpx.ReadTimeout("")
+
+        with pytest.raises(httpx.ReadTimeout):
+            await qdrant_module.with_retry(always_times_out, "upsert", attempts=2)
+
+    async def test_a_real_error_is_not_retried(self, monkeypatch):
+        from src.vector import qdrant as qdrant_module
+
+        attempts = []
+
+        async def bad_request():
+            attempts.append(1)
+            raise ValueError("malformed point")
+
+        with pytest.raises(ValueError):
+            await qdrant_module.with_retry(bad_request, "upsert")
+        assert len(attempts) == 1
+
+
+def test_a_blank_exception_message_still_names_the_failure():
+    import httpx
+
+    from src.errors import describe
+
+    assert describe(httpx.ReadTimeout("")) == "ReadTimeout"
+    assert describe(ValueError("bad input")) == "ValueError: bad input"
+
+
+async def _no_sleep(_seconds):
+    return None

@@ -18,7 +18,7 @@ import httpx
 
 from src.config import Settings
 
-SOURCE_TYPES = ("html_archive", "github", "epub", "pdf", "markdown")
+SOURCE_TYPES = ("html_archive", "github", "epub", "pdf", "markdown", "vault")
 MAX_DOWNLOAD_BYTES = 300 * 1024 * 1024
 _GITHUB_TREE_RE = re.compile(
     r"^https://github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)/tree/(?P<ref>[^/]+)/(?P<path>.+?)/?$"
@@ -169,6 +169,20 @@ def resolve_target(
         return [target]
 
     path = resolve_local(settings, source)
+
+    # A vault is one source, not one per note: see loaders.vault.
+    if path.is_dir() and (source_type == "vault" or (path / ".obsidian").is_dir()):
+        return [
+            DocTarget(
+                source_url=f"file://{path.relative_to(settings.docs_root.resolve()).as_posix()}/",
+                source_type="vault",
+                title=title or path.name,
+                framework=framework or "notes",
+                version=version,
+                local_path=path,
+            )
+        ]
+
     files = [path] if path.is_file() else sorted(p for p in path.rglob("*") if p.is_file())
     books: dict[str, Path] = {}
     for file in files:

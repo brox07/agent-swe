@@ -245,6 +245,50 @@ class TestMarkdown:
         assert "[example: missing.py]" in sections[0].text
 
 
+class TestObsidian:
+    def test_the_filename_titles_the_note(self):
+        sections = loaders.obsidian_note("Some body text.", "Work/Returns.md", "Returns")
+        assert sections[0].heading_path == ["Returns"]
+        assert sections[0].location == "Work/Returns.md"
+
+    def test_headings_nest_under_the_note_title(self):
+        text = "# Overview\n\nTop.\n\n## Details\n\nMore.\n"
+        paths = [s.heading_path for s in loaders.obsidian_note(text, "n.md", "Printerless Returns")]
+        assert paths == [
+            ["Printerless Returns", "Overview"],
+            ["Printerless Returns", "Overview", "Details"],
+        ]
+
+    def test_frontmatter_tags_are_searchable_and_metadata_is_not(self):
+        text = "---\ntype: prompt\nupdated: 2026-01-26\ntags: [topic/ai-agents]\n---\nBody.\n"
+        section = loaders.obsidian_note(text, "n.md", "Hopper")
+        assert "tags: topic/ai-agents" in section[0].text
+        assert "type: prompt" in section[0].text
+        assert "2026-01-26" not in section[0].text
+
+    def test_wikilinks_become_text_and_embeds_are_dropped(self):
+        text = "See [[AR CREDIT]] and [[Shipment Status|returns]].\n\n![[Pasted image 1.png]]\n"
+        body = loaders.obsidian_note(text, "n.md", "Note")[0].text
+        assert "See AR CREDIT and returns." in body
+        assert "Pasted image" not in body
+
+    def test_a_horizontal_rule_is_not_frontmatter(self):
+        text = "**Role:** DM\n\n---\n## Summary\n\nBody.\n"
+        body = " ".join(s.text for s in loaders.obsidian_note(text, "n.md", "Mike"))
+        assert "**Role:** DM" in body
+
+    def test_editor_config_and_trash_are_skipped(self, tmp_path):
+        (tmp_path / ".obsidian").mkdir()
+        (tmp_path / ".trash").mkdir()
+        (tmp_path / "Work").mkdir()
+        (tmp_path / ".obsidian" / "config.md").write_text("plugin settings")
+        (tmp_path / ".trash" / "Deleted Idea.md").write_text("an idea I threw away")
+        (tmp_path / "Work" / "Live Note.md").write_text("current work")
+        doc = loaders.vault(tmp_path, "BroxWorx")
+        assert doc.title == "BroxWorx"
+        assert [s.heading_path for s in doc.sections] == [["Live Note"]]
+
+
 def _tarball(files: dict[str, str]) -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -457,6 +501,39 @@ class TestIngestion:
         assert status["status"] == "succeeded"
         assert status["files_done"] == 1
         assert "broken" in status["error"]
+
+    async def test_a_vault_ingests_as_one_source_and_prunes_deleted_notes(
+        self, docs, sync, settings, store, search
+    ):
+        vault = settings.docs_root / "vault"
+        (vault / ".obsidian").mkdir(parents=True)
+        (vault / "Projects").mkdir()
+        (vault / "Projects" / "Racehub.md").write_text(
+            "# Hosting\n\nCloudflared fronts racehub so no port is exposed.\n"
+        )
+        (vault / "Scratch.md").write_text("# Scratch\n\nThrowaway note.\n")
+
+        status = await _wait(docs, sync, (await docs.start("vault"))["job_id"])
+        assert status["status"] == "succeeded"
+        assert await store.count_docs("file://vault/") == 2
+
+        results = await search.search_docs("why is cloudflared in front of racehub")
+        assert results[0].section == "Racehub > Hosting"
+        assert results[0].framework == "notes"
+
+        (vault / "Scratch.md").unlink()
+        await _wait(docs, sync, (await docs.start("vault"))["job_id"])
+        assert await store.count_docs("file://vault/") == 1
+
+    async def test_an_unchanged_vault_is_skipped(self, docs, sync, settings, embedder):
+        vault = settings.docs_root / "vault"
+        (vault / ".obsidian").mkdir(parents=True)
+        (vault / "Note.md").write_text("# A\n\nBody.\n")
+        await _wait(docs, sync, (await docs.start("vault"))["job_id"])
+        calls = embedder.embed_calls
+        again = await _wait(docs, sync, (await docs.start("vault"))["job_id"])
+        assert again["files_skipped"] == 1
+        assert embedder.embed_calls == calls
 
     async def test_forget_removes_a_source_and_its_vectors(self, docs, sync, settings, store):
         _write_book(settings)

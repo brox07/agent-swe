@@ -262,6 +262,70 @@ def github_markdown(
     return LoadedDoc(title=title, sections=sections)
 
 
+# --- Obsidian --------------------------------------------------------------------
+
+# .obsidian is editor config; .trash holds notes the author deleted and would be
+# startled to see resurface in a search.
+VAULT_SKIP_DIRS = {".obsidian", ".trash", ".git", "node_modules", ".stfolder"}
+_FRONT_MATTER_BLOCK_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+_EMBED_RE = re.compile(r"!\[\[[^\]]*\]\]")
+_WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+# Frontmatter worth searching. "updated" and the rest are metadata, not content.
+_KEPT_FRONT_MATTER = ("tags", "type", "aliases", "status", "project")
+
+
+def _front_matter_line(text: str) -> str:
+    """Frontmatter tags and aliases as a searchable line, not silently dropped."""
+    match = _FRONT_MATTER_BLOCK_RE.match(text)
+    if not match:
+        return ""
+    kept = []
+    for line in match.group(1).splitlines():
+        key, _, value = line.partition(":")
+        key, value = key.strip().lower(), value.strip().strip("[]").strip()
+        if key in _KEPT_FRONT_MATTER and value:
+            kept.append(f"{key}: {value}")
+    return " · ".join(kept)
+
+
+def obsidian_note(text: str, rel_path: str, title: str) -> list[DocSection]:
+    """One note's sections, titled by its filename.
+
+    Only a minority of notes open with an H1, so the filename carries the title;
+    without it a section trail reads "Requirements" with no hint of which note.
+    Wikilinks become their display text and image embeds are dropped.
+    """
+    body = _FRONT_MATTER_BLOCK_RE.sub("", text)
+    body = _EMBED_RE.sub("", body)
+    body = _WIKILINK_RE.sub(lambda m: m.group(2) or m.group(1), body)
+    lead = _front_matter_line(text)
+    if lead:
+        body = f"{lead}\n\n{body}"
+    return markdown_sections(body, rel_path, base_path=[title])
+
+
+def vault(root, name: str):
+    """An Obsidian vault as one document: every note, in path order.
+
+    The vault is a single source rather than one source per note, so a re-ingest
+    replaces it wholesale and notes deleted since the last run take their chunks
+    with them. That costs a full re-embed on any change, which is minutes at the
+    scale of a personal vault.
+    """
+    sections: list[DocSection] = []
+    for path in sorted(root.rglob("*.md")):
+        rel = path.relative_to(root)
+        if any(part in VAULT_SKIP_DIRS for part in rel.parts):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            logger.warning("skipping unreadable note %s: %s", rel, exc)
+            continue
+        sections.extend(obsidian_note(text, rel.as_posix(), path.stem))
+    return LoadedDoc(title=name, sections=sections)
+
+
 # --- PDF -----------------------------------------------------------------------
 
 

@@ -25,11 +25,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import statistics
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -89,6 +92,17 @@ async def run_suite(
     }
 
 
+@asynccontextmanager
+async def connect(url: str, token: str | None):
+    """A session, carrying the bearer token when the engine requires one."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    async with httpx2.AsyncClient(headers=headers, timeout=120) as http:
+        async with streamable_http_client(url, http_client=http) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://localhost:8000/mcp")
@@ -96,6 +110,9 @@ async def main() -> None:
     parser.add_argument("--rerank", choices=("off", "on", "both"), default="both")
     parser.add_argument("--misses", action="store_true", help="print unanswered queries")
     parser.add_argument("--json", type=Path, help="write the full report here")
+    parser.add_argument(
+        "--token", default=os.environ.get("MCP_AUTH_TOKEN"), help="bearer token, if set"
+    )
     args = parser.parse_args()
 
     labels = json.loads(QUERIES.read_text())
@@ -103,12 +120,10 @@ async def main() -> None:
     modes = [False, True] if args.rerank == "both" else [args.rerank == "on"]
 
     reports = []
-    async with streamable_http_client(args.url) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            for suite in suites:
-                for rerank in modes:
-                    reports.append(await run_suite(session, suite, labels[suite], rerank))
+    async with connect(args.url, args.token) as session:
+        for suite in suites:
+            for rerank in modes:
+                reports.append(await run_suite(session, suite, labels[suite], rerank))
 
     header = (
         f"{'suite':6} {'rerank':7} {'n':>3} {'hit@1':>6} "

@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     # size times sequence length: 32 held ~16GB resident during a long ingest and
     # starved a 24GB host. 8 stays near 1.5GB for no measurable throughput loss.
     embed_batch_size: int = 8
+    # And a ceiling on the characters in one batch. Batch memory scales with the
+    # longest text in it, and a code chunk can reach max_chunk_chars (~24k), so
+    # counting alone let eight of them share a batch — enough anonymous memory to
+    # reach a 10GB container limit on one repository. A long chunk now embeds
+    # alone; short ones still fill the batch.
+    embed_batch_chars: int = 16_000
     inference_workers: int = 2
     eager_model_load: bool = True
 

@@ -213,6 +213,32 @@ class TestIncrementalSync:
         assert await store.count("demo") == before + 1
 
 
+class TestBatchPlanning:
+    def test_a_batch_is_capped_by_count_and_by_size(self):
+        from src.vector.embedder import plan_batches
+
+        groups = plan_batches(["a" * 100] * 10, max_count=4, max_chars=10_000)
+        assert [len(g) for g in groups] == [4, 4, 2]
+
+        # Three would be 12k against a 10k budget, so the batch closes at two.
+        groups = plan_batches(["a" * 4000] * 6, max_count=8, max_chars=10_000)
+        assert [len(g) for g in groups] == [2, 2, 2]
+
+    def test_an_oversized_text_embeds_alone(self):
+        from src.vector.embedder import plan_batches
+
+        groups = plan_batches(["a" * 100, "b" * 24_000, "c" * 100], 8, 16_000)
+        assert [len(g) for g in groups] == [1, 1, 1]
+        assert all(len(g[0]) > 0 for g in groups)
+
+    def test_every_text_survives_planning(self):
+        from src.vector.embedder import plan_batches
+
+        texts = [f"{i}" * (i + 1) for i in range(50)]
+        planned = [t for group in plan_batches(texts, 8, 500) for t in group]
+        assert planned == texts
+
+
 class TestEmbeddingIsSerialized:
     async def test_two_jobs_do_not_embed_at_once(self):
         """Concurrent jobs multiplied memory until the kernel killed the engine."""

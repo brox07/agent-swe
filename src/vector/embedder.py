@@ -24,6 +24,27 @@ logger = logging.getLogger(__name__)
 _bulk_embed = asyncio.Semaphore(1)
 
 
+def plan_batches(texts: list[str], max_count: int, max_chars: int) -> list[list[str]]:
+    """Group texts so no batch exceeds a count or a total size.
+
+    The runtime pads a batch to its longest member and holds a workspace sized
+    for it, so batching purely by count lets one long chunk multiply the cost of
+    everything beside it. A text over the budget embeds on its own.
+    """
+    groups: list[list[str]] = []
+    current: list[str] = []
+    size = 0
+    for text in texts:
+        if current and (len(current) >= max_count or size + len(text) > max_chars):
+            groups.append(current)
+            current, size = [], 0
+        current.append(text)
+        size += len(text)
+    if current:
+        groups.append(current)
+    return groups
+
+
 class SparseVec(NamedTuple):
     indices: list[int]
     values: list[float]
@@ -141,6 +162,7 @@ class FastEmbedder:
         dense_model = await self._get_dense()
         sparse_model = await self._get_sparse()
         batch = self._settings.embed_batch_size
+        budget = self._settings.embed_batch_chars
 
         # A batch is padded to its longest text, so one long listing among short
         # chunks makes the whole batch pay for its length. Embedding in length
@@ -149,11 +171,16 @@ class FastEmbedder:
         ordered = [texts[i] for i in order]
 
         def _work() -> tuple[list[list[float]], list[SparseVec]]:
-            dense_sorted = [v.tolist() for v in dense_model.embed(ordered, batch_size=batch)]
-            sparse_sorted = [
-                SparseVec(indices=s.indices.tolist(), values=s.values.tolist())
-                for s in sparse_model.embed(ordered, batch_size=batch)
-            ]
+            dense_sorted: list[list[float]] = []
+            sparse_sorted: list[SparseVec] = []
+            for group in plan_batches(ordered, batch, budget):
+                dense_sorted.extend(
+                    v.tolist() for v in dense_model.embed(group, batch_size=len(group))
+                )
+                sparse_sorted.extend(
+                    SparseVec(indices=s.indices.tolist(), values=s.values.tolist())
+                    for s in sparse_model.embed(group, batch_size=len(group))
+                )
             dense: list[list[float]] = [[] for _ in texts]
             sparse: list[SparseVec] = [SparseVec([], []) for _ in texts]
             for position, original in enumerate(order):

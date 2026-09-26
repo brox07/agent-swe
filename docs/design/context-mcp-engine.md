@@ -496,3 +496,44 @@ Local paths must resolve under `DOCS_ROOT` (`/app/data`). URLs must be https on
 a `DOCS_ALLOWED_HOSTS` entry or its subdomain, checked on every redirect hop.
 Downloads are capped at 300MB.
 
+
+## 12. Milestone 3 — Memex
+
+Status: agreed 2026-09-26, pending implementation.
+
+The engine is renamed **Memex**, after Vannevar Bush's 1945 desk machine for
+linking one's own notes to the books behind them, which is what it becomes. The
+Obsidian vault is the primary technical documentation, maintained by both the
+user and Claude; the books back it up; code search is unchanged.
+
+### 12.1 Decisions
+
+| # | Area | Decision |
+|---|------|----------|
+| 1 | Reference docs | Removed: the five presets' data, `data/cache`, and the preset, URL, GitHub and HTML-archive code paths. EPUB and PDF books stay. |
+| 2 | Vault scope | `Documentation`, `AI Agents`, `Work`, and `Projects/{Homelab, Sites, TaylorBroxterman.com, Templates}`. Everything else, including `_Archive`, stays out. |
+| 3 | Indexing | One source per note, replacing one source for the whole vault. An in-engine scan every 5 minutes re-embeds only notes whose hash changed and prunes deleted ones. Notes Claude writes are indexed at write time. |
+| 4 | Search | One tool, grouped: matching notes first, then book passages on the same topic labelled as supporting references. |
+| 5 | Writes | Create and edit only, within the scoped folders; no delete or move. A write carries the hash the note had when read and is refused if the note has since changed (Dropbox/remotely-save sync makes concurrent edits realistic). |
+| 6 | Write access | Any client with the MCP auth token, as for search. The vault mount becomes read-write. |
+| 7 | Conventions | Claude's edits set frontmatter `updated`, `updated_by: claude`, and `sources` (books and code relied on), and respect existing tags and `Projects/Templates`. |
+| 8 | Staleness | The engine flags mechanically: age, broken wikilinks, and code linked via frontmatter `repo:`/`paths:` that changed after the note's last edit. Whether a note disagrees with books or code is judged by Claude Code in session; the engine calls no LLM. |
+| 9 | Evaluation | ~25 labelled note queries drafted from the vault and reviewed by the user, becoming the baseline for notes-first search. The reference-docs suite is retired with the docs. |
+
+### 12.2 Order
+
+1. Rename to Memex, keeping the Compose volume names so the index survives.
+2. Remove reference docs.
+3. Per-note vault indexing and the 5-minute scan.
+4. Grouped notes-first search.
+5. Write tools.
+6. Stale-note flags.
+7. The embedding memory leak (TODO, *Performance*), which matters more for an
+   engine that now scans and accepts writes all day.
+
+Delivered on one `memex` branch as a single PR against `main`.
+
+### 12.3 Out of scope
+
+A personal agent over the rest of the vault — career, home and car maintenance —
+is a possible later milestone, not part of this one.

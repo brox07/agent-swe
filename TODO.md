@@ -1,7 +1,34 @@
 # TODO
 
-Status as of 2026-09-19. Priority order. Design rationale for anything here lives
+Status as of 2026-09-26. Priority order. Design rationale for anything here lives
 in `docs/design/context-mcp-engine.md`.
+
+## Milestone 3 — Memex
+
+Agreed 2026-09-26; decisions in design doc section 12. Delivered on the `memex`
+branch as one PR.
+
+- [ ] **GitHub setup.** Needs the `brox07` account (`gh auth login`); the
+      logged-in `bbroxterman` has read access only. Push `main` and `memex`,
+      make `main` the default branch, rename the repository to `memex`, and
+      point `origin` at the new URL.
+- [ ] Rename to Memex: package, Compose service and container names, docs.
+      Keep the Compose volume names (`name: agent-swe` or explicit volume
+      names) so the existing index survives. The local folder rename changes
+      this repository's `repo_name` in the index and the scheduled refresh path.
+- [ ] Remove reference docs: presets, URL/GitHub/HTML-archive loaders, their
+      tests, `data/cache`, and their points and `DocSource` rows.
+- [ ] Per-note vault indexing, scoped folders, 5-minute hash scan.
+- [ ] Grouped search: notes first, book passages as supporting references.
+- [ ] Write tools: create/edit in scope, hash check on write, frontmatter
+      markers, index on write. Vault mount read-write.
+- [ ] Stale-note flags: age, broken wikilinks, frontmatter `repo:`/`paths:`
+      changed since the note's last edit.
+- [ ] Labelled note queries (~25) in `eval/`, reviewed by the user; baseline
+      recorded in `eval/README.md`.
+- [ ] Then the embedding memory leak under *Performance*.
+
+Later: a personal agent over the rest of the vault (career, home, car).
 
 ## Milestone 1 — close out
 
@@ -12,6 +39,9 @@ in `docs/design/context-mcp-engine.md`.
       network itself fine; restarting the service is the next step.
 
 ## Milestone 2 — documentation
+
+Reference-doc items below are superseded by Milestone 3, which removes the
+presets; book items still apply.
 
 - [x] `ingest_document`, `get_best_practices`, `list_doc_sources`.
 - [x] Loaders: Sphinx HTML archives, EPUB, PDF (bookmarks), Markdown from GitHub.
